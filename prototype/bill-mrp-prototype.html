@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bill Template Prototype – MRP Comparison</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #e5e7eb;
+      font-family: 'Segoe UI', sans-serif;
+      padding: 30px 20px;
+      min-height: 100vh;
+    }
+    h1 {
+      text-align: center;
+      font-size: 20px;
+      color: #1e293b;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+    .subtitle {
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+      margin-bottom: 30px;
+    }
+
+    .page-grid {
+      display: flex;
+      gap: 40px;
+      justify-content: center;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .col-label {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 5px 18px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+    }
+    .col-label.current  { background:#fee2e2; color:#b91c1c; }
+    .col-label.proposed { background:#dcfce7; color:#15803d; }
+
+    /* ── Receipt shell ── */
+    .receipt {
+      width: 300px;
+      background: #fff;
+      border-radius: 4px;
+      padding: 14px 14px 20px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      color: #111;
+      box-shadow: 0 4px 20px rgba(0,0,0,.15);
+      position: relative;
+    }
+    /* Torn-edge top */
+    .receipt::before {
+      content:'';
+      display:block;
+      height:10px;
+      margin: -14px -14px 12px;
+      background: radial-gradient(circle at 50% 0, #e5e7eb 6px, #fff 6px) repeat-x;
+      background-size: 18px 10px;
+    }
+    /* Torn-edge bottom */
+    .receipt::after {
+      content:'';
+      display:block;
+      height:10px;
+      margin: 18px -14px -20px;
+      background: radial-gradient(circle at 50% 100%, #e5e7eb 6px, #fff 6px) repeat-x;
+      background-size: 18px 10px;
+    }
+
+    /* ── Header ── */
+    .god-name  { text-align:center; font-size:11px; font-weight:400; margin-bottom:2px; color:#374151; }
+    .store-name{ text-align:center; font-size:17px; font-weight:900; letter-spacing:.5px; margin-bottom:3px; }
+    .store-sub  { text-align:center; font-size:9px; color:#555; line-height:1.5; }
+    .store-sub span { display:block; }
+
+    /* ── Dividers ── */
+    .dashed { border:none; border-top:1px dashed #999; margin:6px 0; }
+    .solid  { border:none; border-top:1.5px solid #111; margin:4px 0; }
+
+    /* ── Info rows ── */
+    .info-row { display:flex; justify-content:space-between; font-size:10px; margin:1.5px 0; }
+    .info-row .lbl { color:#333; }
+    .info-row .val { font-weight:600; }
+
+    /* ── Items header ── */
+    .items-header {
+      display:grid;
+      font-weight:700;
+      font-size:10px;
+      padding: 2px 0;
+    }
+    /* ── CURRENT: 4-col grid ── */
+    .items-header.current-grid { grid-template-columns: 2fr .7fr .9fr 1fr; }
+    .items-header.current-grid .col-r { text-align:right; }
+
+    /* ── PROPOSED: 5-col grid (adds MRP col) ── */
+    .items-header.proposed-grid { grid-template-columns: 1.8fr .6fr .8fr .8fr 1fr; }
+    .items-header.proposed-grid .col-r { text-align:right; }
+
+    /* ── Item rows ── */
+    .item-row { margin-bottom:3px; }
+    .item-cells {
+      display:grid;
+      font-size:10px;
+      align-items:start;
+    }
+    .item-cells.current-grid  { grid-template-columns: 2fr .7fr .9fr 1fr; }
+    .item-cells.proposed-grid { grid-template-columns: 1.8fr .6fr .8fr .8fr 1fr; }
+    .item-cells .col-r { text-align:right; }
+
+    .item-name { font-size:10px; font-weight:600; line-height:1.3; }
+
+    /* MRP strike-through */
+    .mrp-val { text-decoration: line-through; color: #9ca3af; font-size: 9.5px; }
+
+    /* Saving badge on proposed */
+    .saving-line {
+      font-size:8.5px;
+      color:#15803d;
+      margin-top:1px;
+      padding-left:1px;
+    }
+
+    .disc-line { font-size:8px; color:#555; margin-top:-1px; margin-bottom:2px; }
+
+    /* ── Totals ── */
+    .total-row { display:flex; justify-content:space-between; font-size:10px; margin:1.5px 0; }
+    .grand-total-row {
+      display:flex; justify-content:space-between;
+      font-size:14px; font-weight:900; margin:3px 0;
+    }
+
+    /* Savings summary box (proposed only) */
+    .savings-box {
+      background:#f0fdf4;
+      border:1px dashed #16a34a;
+      border-radius:4px;
+      padding:5px 8px;
+      margin:6px 0 2px;
+      font-size:9px;
+      color:#15803d;
+    }
+    .savings-box .sav-row { display:flex; justify-content:space-between; margin:1px 0; }
+    .savings-box .sav-total { font-weight:700; font-size:10px; border-top:1px solid #bbf7d0; padding-top:3px; margin-top:3px; }
+
+    /* ── Payment ── */
+    .payment-section { margin-top:4px; }
+
+    /* ── Barcode area ── */
+    .barcode-text {
+      text-align:center; letter-spacing:3px;
+      font-size:9px; margin:6px 0 3px; color:#333;
+    }
+
+    /* ── Footer ── */
+    .footer { text-align:center; margin-top:4px; }
+    .footer .thank { font-size:12px; font-weight:700; }
+    .footer .visit { font-size:9px; color:#555; margin-top:2px; }
+    .footer .stars { font-size:8px; color:#aaa; letter-spacing:3px; margin-top:2px; }
+
+    /* ── Badge legend ── */
+    .legend {
+      display:flex; gap:16px; justify-content:center;
+      flex-wrap:wrap; margin-bottom:28px;
+    }
+    .legend-item { display:flex; align-items:center; gap:6px; font-size:12px; color:#374151; }
+    .dot { width:10px; height:10px; border-radius:50%; }
+    .dot.new { background:#16a34a; }
+    .dot.same { background:#3b82f6; }
+    .dot.removed { background:#dc2626; }
+  </style>
+</head>
+<body>
+
+<h1>Bill Template — MRP vs Store Price Comparison</h1>
+<p class="subtitle">Prototype · For client review only · Not final code</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="dot new"></div> New element (proposed)</div>
+  <div class="legend-item"><div class="dot same"></div> Unchanged</div>
+  <div class="legend-item"><div class="dot removed"></div> Removed / moved</div>
+</div>
+
+<div class="page-grid">
+
+  <!-- ════════════════════════════════════
+       COLUMN 1 — CURRENT DESIGN
+  ════════════════════════════════════ -->
+  <div class="column">
+    <div class="col-label current">CURRENT DESIGN</div>
+    <div class="receipt">
+
+      <!-- Header -->
+      <div class="god-name">✦ Sri Ganeshaya Namaha ✦</div>
+      <div class="store-name">My Bakery Store</div>
+      <div class="store-sub">
+        <span>123 Main St, City, State – 123456</span>
+        <span>Tel: 9876543210</span>
+        <span>GSTIN: 22AAAAA0000A1Z5</span>
+      </div>
+
+      <hr class="dashed"/>
+
+      <!-- Bill info -->
+      <div class="info-row"><span class="lbl">Bill No:</span><span class="val">BILL-001</span></div>
+      <div class="info-row"><span class="lbl">Date:</span><span class="val">24/05/2026 10:30 AM</span></div>
+      <div class="info-row"><span class="lbl">Cashier:</span><span class="val">Admin</span></div>
+      <div class="info-row"><span class="lbl">BILL TO:</span><span class="val">Walk-in Customer</span></div>
+      <div class="info-row"><span class="lbl">Phone:</span><span class="val">9876543210</span></div>
+
+      <hr class="dashed"/>
+
+      <!-- Items header — 4 cols -->
+      <div class="items-header current-grid">
+        <div>ITEM</div>
+        <div class="col-r">QTY</div>
+        <div class="col-r">RATE</div>
+        <div class="col-r">AMT</div>
+      </div>
+      <hr class="solid"/>
+
+      <!-- Item 1 -->
+      <div class="item-row">
+        <div class="item-cells current-grid">
+          <div class="item-name">Premium Basmati Rice</div>
+          <div class="col-r">2</div>
+          <div class="col-r">150.00</div>
+          <div class="col-r">315.00</div>
+        </div>
+      </div>
+
+      <!-- Item 2 -->
+      <div class="item-row">
+        <div class="item-cells current-grid">
+          <div class="item-name">Sunflower Oil 1L</div>
+          <div class="col-r">1</div>
+          <div class="col-r">120.00</div>
+          <div class="col-r">119.70</div>
+        </div>
+        <div class="disc-line">Disc: -Rs.6.00</div>
+      </div>
+
+      <!-- Item 3 -->
+      <div class="item-row">
+        <div class="item-cells current-grid">
+          <div class="item-name">Whole Wheat Bread</div>
+          <div class="col-r">3</div>
+          <div class="col-r">40.00</div>
+          <div class="col-r">120.00</div>
+        </div>
+      </div>
+
+      <hr class="dashed"/>
+
+      <!-- Totals -->
+      <div class="total-row"><span>Subtotal (Before Tax):</span><span>Rs.554.70</span></div>
+      <div class="total-row"><span>SGST:</span><span>Rs.13.85</span></div>
+      <div class="total-row"><span>CGST:</span><span>Rs.13.85</span></div>
+      <div class="total-row"><span>Tax Amount:</span><span>Rs.27.70</span></div>
+      <hr class="dashed"/>
+      <div class="total-row"><span>Amount After Tax:</span><span>Rs.582.40</span></div>
+      <hr class="solid"/>
+      <div class="grand-total-row"><span>TOTAL:</span><span>Rs.582.40</span></div>
+      <hr class="solid"/>
+
+      <!-- Payment -->
+      <div class="payment-section">
+        <div class="info-row"><span>Payment Mode:</span><span>CASH</span></div>
+        <div class="info-row"><span>Paid Amount:</span><span><b>Rs.600.00</b></span></div>
+      </div>
+
+      <hr class="dashed"/>
+      <div class="barcode-text">B I L L 0 0 1</div>
+      <hr class="dashed"/>
+
+      <div class="footer">
+        <div class="thank">Thank you for your business!</div>
+        <div class="visit">Visit Again</div>
+        <div class="stars">* * * * * * * * * *</div>
+      </div>
+    </div>
+    <!-- note -->
+    <p style="font-size:11px;color:#6b7280;text-align:center;max-width:300px;">
+      Only selling price shown.<br>Customer cannot see MRP or savings.
+    </p>
+  </div><!-- /column 1 -->
+
+
+  <!-- ════════════════════════════════════
+       COLUMN 2 — PROPOSED DESIGN
+  ════════════════════════════════════ -->
+  <div class="column">
+    <div class="col-label proposed">PROPOSED DESIGN</div>
+    <div class="receipt">
+
+      <!-- Header -->
+      <div class="god-name">✦ Sri Ganeshaya Namaha ✦</div>
+      <div class="store-name">My Bakery Store</div>
+      <div class="store-sub">
+        <span>123 Main St, City, State – 123456</span>
+        <span>Tel: 9876543210</span>
+        <span>GSTIN: 22AAAAA0000A1Z5</span>
+      </div>
+
+      <hr class="dashed"/>
+
+      <!-- Bill info -->
+      <div class="info-row"><span class="lbl">Bill No:</span><span class="val">BILL-001</span></div>
+      <div class="info-row"><span class="lbl">Date:</span><span class="val">24/05/2026 10:30 AM</span></div>
+      <div class="info-row"><span class="lbl">Cashier:</span><span class="val">Admin</span></div>
+      <div class="info-row"><span class="lbl">BILL TO:</span><span class="val">Walk-in Customer</span></div>
+      <div class="info-row"><span class="lbl">Phone:</span><span class="val">9876543210</span></div>
+
+      <hr class="dashed"/>
+
+      <!-- Items header — 5 cols (MRP added) -->
+      <div class="items-header proposed-grid">
+        <div>ITEM</div>
+        <div class="col-r">QTY</div>
+        <div class="col-r" style="color:#9ca3af;font-size:9px;">MRP</div>
+        <div class="col-r">RATE</div>
+        <div class="col-r">AMT</div>
+      </div>
+      <hr class="solid"/>
+
+      <!-- Item 1 — no discount -->
+      <div class="item-row">
+        <div class="item-cells proposed-grid">
+          <div class="item-name">Premium Basmati Rice</div>
+          <div class="col-r">2</div>
+          <div class="col-r mrp-val">180.00</div>
+          <div class="col-r">150.00</div>
+          <div class="col-r">315.00</div>
+        </div>
+        <div class="saving-line">↓ Save Rs.60.00/pc</div>
+      </div>
+
+      <!-- Item 2 — with discount -->
+      <div class="item-row">
+        <div class="item-cells proposed-grid">
+          <div class="item-name">Sunflower Oil 1L</div>
+          <div class="col-r">1</div>
+          <div class="col-r mrp-val">140.00</div>
+          <div class="col-r">120.00</div>
+          <div class="col-r">119.70</div>
+        </div>
+        <div class="disc-line">Disc: -Rs.6.00</div>
+        <div class="saving-line">↓ Save Rs.20.00/pc + Disc Rs.6.00</div>
+      </div>
+
+      <!-- Item 3 — no discount -->
+      <div class="item-row">
+        <div class="item-cells proposed-grid">
+          <div class="item-name">Whole Wheat Bread</div>
+          <div class="col-r">3</div>
+          <div class="col-r mrp-val">50.00</div>
+          <div class="col-r">40.00</div>
+          <div class="col-r">120.00</div>
+        </div>
+        <div class="saving-line">↓ Save Rs.10.00/pc</div>
+      </div>
+
+      <hr class="dashed"/>
+
+      <!-- Totals -->
+      <div class="total-row"><span>Subtotal (Before Tax):</span><span>Rs.554.70</span></div>
+      <div class="total-row"><span>SGST:</span><span>Rs.13.85</span></div>
+      <div class="total-row"><span>CGST:</span><span>Rs.13.85</span></div>
+      <div class="total-row"><span>Tax Amount:</span><span>Rs.27.70</span></div>
+      <hr class="dashed"/>
+      <div class="total-row"><span>Amount After Tax:</span><span>Rs.582.40</span></div>
+      <hr class="solid"/>
+      <div class="grand-total-row"><span>TOTAL:</span><span>Rs.582.40</span></div>
+      <hr class="solid"/>
+
+      <!-- ★ Savings Summary Box (new) -->
+      <div class="savings-box">
+        <div style="font-weight:700;margin-bottom:3px;">🎉 Your Savings Today</div>
+        <div class="sav-row"><span>MRP Total:</span><span>Rs.680.00</span></div>
+        <div class="sav-row"><span>You Paid:</span><span>Rs.582.40</span></div>
+        <div class="sav-row sav-total"><span>Total Savings:</span><span>Rs.97.60 (14%)</span></div>
+      </div>
+
+      <!-- Payment -->
+      <div class="payment-section">
+        <div class="info-row"><span>Payment Mode:</span><span>CASH</span></div>
+        <div class="info-row"><span>Paid Amount:</span><span><b>Rs.600.00</b></span></div>
+      </div>
+
+      <hr class="dashed"/>
+      <div class="barcode-text">B I L L 0 0 1</div>
+      <hr class="dashed"/>
+
+      <div class="footer">
+        <div class="thank">Thank you for your business!</div>
+        <div class="visit">Visit Again</div>
+        <div class="stars">* * * * * * * * * *</div>
+      </div>
+    </div>
+    <!-- note -->
+    <p style="font-size:11px;color:#15803d;text-align:center;max-width:300px;">
+      MRP shown (strikethrough) + store rate.<br>
+      Per-item saving + total savings summary box.
+    </p>
+  </div><!-- /column 2 -->
+
+</div><!-- /page-grid -->
+
+<!-- ── Change summary ── -->
+<div style="max-width:680px;margin:40px auto 0;background:#fff;border-radius:8px;padding:20px 24px;box-shadow:0 2px 10px rgba(0,0,0,.08);">
+  <h2 style="font-size:15px;color:#1e293b;margin-bottom:14px;">📋 What Changes in the Proposed Design</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+    <thead>
+      <tr style="background:#f1f5f9;">
+        <th style="text-align:left;padding:7px 10px;color:#475569;">Area</th>
+        <th style="text-align:left;padding:7px 10px;color:#475569;">Current</th>
+        <th style="text-align:left;padding:7px 10px;color:#15803d;">Proposed</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-top:1px solid #e2e8f0;">
+        <td style="padding:7px 10px;font-weight:600;">Item columns</td>
+        <td style="padding:7px 10px;">4 cols: Item · Qty · Rate · Amt</td>
+        <td style="padding:7px 10px;color:#15803d;">5 cols: Item · Qty · <b>MRP</b> · Rate · Amt</td>
+      </tr>
+      <tr style="border-top:1px solid #e2e8f0;background:#f8fafc;">
+        <td style="padding:7px 10px;font-weight:600;">MRP display</td>
+        <td style="padding:7px 10px;">Not shown</td>
+        <td style="padding:7px 10px;color:#15803d;">Shown strikethrough next to Rate</td>
+      </tr>
+      <tr style="border-top:1px solid #e2e8f0;">
+        <td style="padding:7px 10px;font-weight:600;">Per-item saving</td>
+        <td style="padding:7px 10px;">Not shown</td>
+        <td style="padding:7px 10px;color:#15803d;">Small green line below item (↓ Save Rs.X/pc)</td>
+      </tr>
+      <tr style="border-top:1px solid #e2e8f0;background:#f8fafc;">
+        <td style="padding:7px 10px;font-weight:600;">Savings summary</td>
+        <td style="padding:7px 10px;">Not present</td>
+        <td style="padding:7px 10px;color:#15803d;">Green box: MRP Total / You Paid / Total Savings</td>
+      </tr>
+      <tr style="border-top:1px solid #e2e8f0;">
+        <td style="padding:7px 10px;font-weight:600;">Items with no MRP</td>
+        <td style="padding:7px 10px;">Normal display</td>
+        <td style="padding:7px 10px;color:#15803d;">MRP column shows "–" · no saving line shown</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

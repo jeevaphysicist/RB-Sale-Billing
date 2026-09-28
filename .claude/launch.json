@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bill-prototype",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", "prototype", "-p", "5555", "--cors", "-c-1"],
+      "port": 5555
+    }
+  ]
+}

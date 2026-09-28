@@ -667,22 +667,23 @@ const POSBillingSystem = () => {
   // Add a manually entered line item to the bill (replaces the old
   // catalog-driven addItemToBill; there is no live product master anymore).
   const addManualItemToBill = () => {
+    const nextIndex = activeTab.billItems.length + 1;
     const name = (newItemForm.name || '').trim();
     if (!name) {
-      toast.error(t('sales.pos.validation.itemNameRequired'));
+      toast.error(t('sales.pos.validation.itemNameRequired', { index: nextIndex }));
       itemNameInputRef.current?.focus();
       return;
     }
 
     const qty = parseFloat(newItemForm.qty);
     if (!qty || qty <= 0) {
-      toast.error(t('sales.pos.validation.invalidQty', { index: 1 }));
+      toast.error(t('sales.pos.validation.invalidQty', { index: nextIndex }));
       return;
     }
 
     const price = parseFloat(newItemForm.price);
     if (isNaN(price) || price < 0) {
-      toast.error(t('sales.pos.validation.invalidPrice', { index: 1 }));
+      toast.error(t('sales.pos.validation.invalidPrice', { index: nextIndex }));
       return;
     }
 
@@ -1647,7 +1648,7 @@ const POSBillingSystem = () => {
       console.error('Error saving tabs to storage:', error);
     }
 
-    setSearchQuery('');
+    setNewItemForm(getDefaultNewItemForm());
     if (showToast) {
       toast.info(t('sales.pos.billCleared'));
     }
@@ -1842,7 +1843,7 @@ const POSBillingSystem = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [grandTotal, activeTabId, activeTab.paymentType]);
+  }, [grandTotal, activeTabId, activeTab.paymentType, newItemForm]);
 
   const bgClass = 'bg-gray-50';
   const cardBg = 'bg-white';

@@ -508,7 +508,7 @@
       "validation": {
         "noItems": "No items in the bill. Please add at least one product.",
         "selectCustomer": "Please select a customer.",
-        "missingProductId": "Item {{index}}: Product ID is missing.",
+        "itemNameRequired": "Item {{index}}: Item name is required.",
         "invalidQty": "Item {{index}}: Quantity must be greater than 0.",
         "invalidPrice": "Item {{index}}: Price must be greater than 0.",
         "stockExceeded": "Item {{index}}: Quantity ({{qty}}) exceeds available stock ({{stock}}).",
@@ -581,6 +581,14 @@
         "trySearching": "Try searching by name, code, HSN, or category",
         "addNewProduct": "Add New Product"
       },
+      "manualItem": {
+        "name": "Item Name",
+        "namePlaceholder": "Enter item name",
+        "unitPrice": "Unit Price",
+        "category": "Category",
+        "taxRate": "Tax %",
+        "addItem": "Add Item"
+      },
       "billItems": {
         "title": "Bill Items",
         "addProduct": "Add Product",
@@ -593,7 +601,7 @@
         "incPrice": "Inc. Price",
         "clearAll": "Clear All",
         "noItemsAdded": "No items added yet",
-        "pressCtrlP": "Press Ctrl+P to search and add products"
+        "pressCtrlP": "Press Ctrl+P or F2 to add an item"
       },
       "rightPanel": {
         "customer": "Customer",

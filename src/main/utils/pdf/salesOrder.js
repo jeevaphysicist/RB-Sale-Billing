@@ -685,12 +685,6 @@ export function generateThermalReceipt(doc, order, type, font, fontBold, config,
       totalItemHeight += 9;
     }
 
-    // If wastage exists, show it below name or HSN
-    if (item.wastage_qty && item.wastage_qty > 0) {
-      const wastY = currentY + totalItemHeight;
-      doc.fontSize(7).text(`${t.wastage}: ${item.wastage_qty}`, col1X, wastY, { width: col1W });
-      totalItemHeight += 9;
-    }
     doc.fontSize(9); // Reset size
 
     doc.text(item.quantity.toString(), col2X, currentY, { width: col2W, align: 'right' });

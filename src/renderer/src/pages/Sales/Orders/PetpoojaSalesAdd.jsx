@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { productService } from '../../../services/productService';
 import { salesOrderService } from '../../../services/salesOrderService';
-import { getCategories } from '../../../services/api';
 import { customerService } from '../../../services/customerService';
 import { toast } from 'sonner';
 import { useAuth } from '../../../contexts/authContext';
@@ -12,7 +10,7 @@ import PrintPreviewModal from '../../../components/PrintPreviewModal';
 import CustomerAddEditForm from '../../Masters/Customer/AddEditForm';
 import { useTranslation } from 'react-i18next';
 import * as LucideIcons from 'lucide-react';
-import { Grid2X2, Search, UserPlus, Star, Percent, Tag, Trash2, Clock, Plus, Minus } from 'lucide-react';
+import { Search, UserPlus, Star, Tag, Trash2, Clock, Plus, Minus, PackagePlus } from 'lucide-react';
 
 const PetpoojaSalesAdd = () => {
     const navigate = useNavigate();
@@ -20,12 +18,10 @@ const PetpoojaSalesAdd = () => {
     const { t } = useTranslation();
 
     // State management
-    const [categories, setCategories] = useState([]);
-    const [selectedCategoryId, setSelectedCategoryId] = useState('all');
-    const [products, setProducts] = useState([]);
-    const [filteredProducts, setFilteredProducts] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState([]);
+    const [itemName, setItemName] = useState('');
+    const [itemQty, setItemQty] = useState(1);
+    const [itemPrice, setItemPrice] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
     const [billNo, setBillNo] = useState('');
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -61,7 +57,7 @@ const PetpoojaSalesAdd = () => {
     const [pdfBase64, setPdfBase64] = useState(null);
     const [pdfHeight, setPdfHeight] = useState(null);
     const printModalRef = useRef(null);
-    const productSearchRef = useRef(null);
+    const itemNameRef = useRef(null);
     const customerSearchRef = useRef(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
@@ -69,8 +65,6 @@ const PetpoojaSalesAdd = () => {
     // Load initial data
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date().toLocaleTimeString()), 1000);
-        fetchCategories();
-        fetchProducts();
         fetchBillNo();
 
         // Check initial fullscreen state and auto-enter
@@ -106,57 +100,10 @@ const PetpoojaSalesAdd = () => {
     };
 
 
-    const fetchCategories = async () => {
-        try {
-            const resp = await getCategories({ limit: 100 });
-            if (resp.success) {
-                // Filter only active categories and sanitize data
-                const activeCategories = resp.data.filter(cat => cat.status === 'active' || cat.status === 'Active');
-                setCategories(activeCategories);
-            }
-        } catch (e) {
-            console.error('Failed to fetch categories', e);
-        }
-    };
-
     const orderTypeLabels = {
         takeaway: 'Take Away',
         dinein: 'Dine In',
         online: 'Online'
-    };
-
-    const fetchProducts = async () => {
-        try {
-            const resp = await productService.getProducts({ limit: 1000, status: 'active' });
-            if (resp.success) {
-                const mapped = await Promise.all(resp.data.map(async (p) => {
-                    let imageData = null;
-                    try {
-                        // Fetch the primary image for the product
-                        const imagesResponse = await window.api.getProductImages(p.id);
-                        if (imagesResponse.success && imagesResponse.data.length > 0) {
-                            const primaryImage = imagesResponse.data[0];
-                            if (primaryImage.imageData) {
-                                imageData = primaryImage.imageData;
-                            }
-                        }
-                    } catch (err) {
-                        console.error(`Error loading image for product ${p.id}:`, err);
-                    }
-
-                    return {
-                        ...p,
-                        price: parseFloat(p.selling_price || 0),
-                        stock: parseFloat(p.current_stock || 0),
-                        image: imageData // Use the base64 image data
-                    };
-                }));
-                setProducts(mapped);
-                setFilteredProducts(mapped);
-            }
-        } catch (e) {
-            console.error('Failed to fetch products', e);
-        }
     };
 
     const fetchBillNo = async () => {
@@ -193,40 +140,34 @@ const PetpoojaSalesAdd = () => {
         return () => clearTimeout(timer);
     }, [customerSearchQuery]);
 
-    // Helper to render Category Icon
-    const renderCategoryIcon = (iconName, isSelected) => {
-        if (iconName && LucideIcons[iconName]) {
-            const Icon = LucideIcons[iconName];
-            return <Icon size={20} strokeWidth={isSelected ? 3 : 2} />;
-        }
-        return <span className="material-symbols-outlined">storefront</span>;
-    };
-
-    // Filter products based on category and search
-    useEffect(() => {
-        let filtered = products;
-        if (selectedCategoryId !== 'all') {
-            filtered = filtered.filter(p => p.category_id === selectedCategoryId);
-        }
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            filtered = filtered.filter(p =>
-                p.product_name.toLowerCase().includes(q) ||
-                (p.product_code && p.product_code.toLowerCase().includes(q))
-            );
-        }
-        setFilteredProducts(filtered);
-    }, [selectedCategoryId, searchQuery, products]);
-
     // Cart operations
-    const addToCart = (product) => {
-        // Stock check removed as per user request
-        const existing = cart.find(item => item.id === product.id);
-        if (existing) {
-            setCart(cart.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item));
-        } else {
-            setCart([...cart, { ...product, qty: 1 }]);
+    const addManualItem = () => {
+        const name = itemName.trim();
+        const qty = parseFloat(itemQty) || 0;
+        const price = parseFloat(itemPrice) || 0;
+
+        if (!name) {
+            toast.error('Item name is required');
+            itemNameRef.current?.focus();
+            return;
         }
+        if (qty <= 0) {
+            toast.error('Quantity must be greater than 0');
+            return;
+        }
+
+        setCart([...cart, {
+            id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name,
+            price,
+            qty
+        }]);
+
+        // Reset the entry form for the next item
+        setItemName('');
+        setItemQty(1);
+        setItemPrice('');
+        itemNameRef.current?.focus();
     };
 
     const updateQty = (id, delta) => {
@@ -403,8 +344,7 @@ const PetpoojaSalesAdd = () => {
                 gstin: ""
             },
             items: cart.map(item => ({
-                productId: item.id,
-                productName: item.product_name,
+                productName: item.name,
                 quantity: item.qty,
                 unitPrice: item.price,
                 taxRate: 0,
@@ -473,16 +413,6 @@ const PetpoojaSalesAdd = () => {
                 // Start Printing Process
                 if (shouldPrint) {
                     try {
-                        // Update local stock immediately
-                        const updatedProducts = products.map(product => {
-                            const cartItem = cart.find(item => item.id === product.id);
-                            if (cartItem) {
-                                return { ...product, stock: product.stock - cartItem.qty };
-                            }
-                            return product;
-                        });
-                        setProducts(updatedProducts);
-
                         // 1. Get printer settings first to determine template size
                         const printerConfig = await window.api.getPrinterSettings();
 
@@ -553,16 +483,6 @@ const PetpoojaSalesAdd = () => {
                         setShowPrintModal(true);
                         setShowPaymentModal(false);
                     }
-                } else {
-                    // Update local stock immediately even if not printing
-                    const updatedProducts = products.map(product => {
-                        const cartItem = cart.find(item => item.id === product.id);
-                        if (cartItem) {
-                            return { ...product, stock: product.stock - cartItem.qty };
-                        }
-                        return product;
-                    });
-                    setProducts(updatedProducts);
                 }
 
             } else {
@@ -581,7 +501,7 @@ const PetpoojaSalesAdd = () => {
         const handleKeyDown = (e) => {
             if (e.key === 'F2') {
                 e.preventDefault();
-                productSearchRef.current?.focus();
+                itemNameRef.current?.focus();
             } else if (e.key === 'F4') {
                 e.preventDefault();
                 customerSearchRef.current?.focus();
@@ -702,45 +622,12 @@ const PetpoojaSalesAdd = () => {
             </header>
 
             <main className="flex flex-1 overflow-hidden">
-                {/* Categories */}
-                <aside className="w-60 bg-white border-r border-slate-200 flex flex-col py-6 px-4 gap-1.5 shrink-0">
-                    <h1 className="px-3 mb-4 text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em]">Categories</h1>
-                    <button
-                        onClick={() => setSelectedCategoryId('all')}
-                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${selectedCategoryId === 'all'
-                            ? 'bg-emerald-50 text-emerald-700 border-r-4 border-emerald-600'
-                            : 'hover:bg-slate-50 text-slate-600'}`}
-                    >
-                        <Grid2X2 size={18} strokeWidth={selectedCategoryId === 'all' ? 2.5 : 2} />
-                        <span className="text-sm font-semibold">All Items</span>
-                    </button>
-                    {categories.map(cat => (
-                        <button
-                            key={cat.id}
-                            onClick={() => setSelectedCategoryId(cat.id)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${selectedCategoryId === cat.id
-                                ? 'bg-emerald-50 text-emerald-700 border-r-4 border-emerald-600'
-                                : 'hover:bg-slate-50 text-slate-600'}`}
-                        >
-                            {renderCategoryIcon(cat.icon, selectedCategoryId === cat.id)}
-                            <span className="text-sm font-medium">{cat.name}</span>
-                        </button>
-                    ))}
-                </aside>
-
-                {/* Products */}
+                {/* Add Item */}
                 <section className="flex-1 bg-[#f8fafc] flex flex-col min-w-0">
                     <div className="p-4 border-b border-[#e5e7eb] bg-white flex items-center gap-4">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                            <input
-                                ref={productSearchRef}
-                                className="w-full pl-12 pr-4 py-3 bg-[#f8fafc] border-none rounded-xl focus:ring-2 focus:ring-[#10b981] text-base"
-                                placeholder="Search products (F2)..."
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+                        <div className="flex items-center gap-2 flex-1">
+                            <PackagePlus className="text-[#10b981]" size={20} />
+                            <h2 className="text-base font-bold text-slate-700">Add Item</h2>
                         </div>
 
                         {/* Loyalty Points Section */}
@@ -769,24 +656,54 @@ const PetpoojaSalesAdd = () => {
                             </div>
                         )}
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
-                            {filteredProducts.map(product => (
-                                <div
-                                    key={product.id}
-                                    onClick={() => addToCart(product)}
-                                    className="bg-white rounded-xl p-3 border border-slate-200 flex flex-col gap-2.5 relative group cursor-pointer hover:border-[#10b981] hover:shadow-lg transition-all"
-                                >
-                                    <div className="flex-1">
-                                        <h3 className="text-[13px] font-bold leading-tight text-slate-800">
-                                            {product.product_name}
-                                        </h3>
+                    <div className="flex-1 overflow-y-auto p-6">
+                        <div className="max-w-xl mx-auto bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-4">Item Details</h3>
+                            <div className="flex flex-col gap-4">
+                                <div>
+                                    <label className="text-sm text-gray-500 font-medium mb-1 block">Item Name</label>
+                                    <input
+                                        ref={itemNameRef}
+                                        type="text"
+                                        value={itemName}
+                                        onChange={(e) => setItemName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addManualItem(); } }}
+                                        placeholder="Enter item name (F2)"
+                                        className="w-full px-4 py-3 bg-[#f8fafc] border border-slate-200 rounded-xl text-base focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981]"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm text-gray-500 font-medium mb-1 block">Quantity</label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={itemQty}
+                                            onChange={(e) => setItemQty(e.target.value)}
+                                            className="w-full px-4 py-3 bg-[#f8fafc] border border-slate-200 rounded-xl text-base focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981]"
+                                        />
                                     </div>
-                                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-50">
-                                        <p className="text-[#10b981] font-black text-sm">₹{product.price.toFixed(2)}</p>
+                                    <div>
+                                        <label className="text-sm text-gray-500 font-medium mb-1 block">Unit Price</label>
+                                        <div className="relative">
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={itemPrice}
+                                                onChange={(e) => setItemPrice(e.target.value)}
+                                                className="w-full pl-8 pr-4 py-3 bg-[#f8fafc] border border-slate-200 rounded-xl text-base focus:ring-2 focus:ring-[#10b981] focus:border-[#10b981]"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            ))}
+                                <button
+                                    onClick={addManualItem}
+                                    className="w-full py-3 bg-[#10b981] text-white rounded-xl font-bold uppercase tracking-wide hover:bg-[#059669] shadow-lg shadow-[#10b981]/20 active:scale-[0.98] transition-all"
+                                >
+                                    Add to Cart
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -814,7 +731,7 @@ const PetpoojaSalesAdd = () => {
                             <div key={item.id} className="flex items-center gap-4 px-5 py-6 border-b border-[#f3f4f6] hover:bg-[#f8fafc]/50">
 
                                 <div className="flex-1 min-w-0">
-                                    <h4 className="text-base font-bold line-clamp-1">{item.name || item.product_name}</h4>
+                                    <h4 className="text-base font-bold line-clamp-1">{item.name}</h4>
                                     <div className="flex items-center gap-1 mt-0.5">
                                         <span className="text-xs text-slate-400 font-bold">₹</span>
                                         <input

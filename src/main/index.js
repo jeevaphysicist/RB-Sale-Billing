@@ -173,8 +173,6 @@ function createWindow() {
   }
 }
 
-import { initializeServer } from './server.js';
-
 app.whenReady().then(async() => {
   try {
     electronApp.setAppUserModelId('com.rabtoise.billing')
@@ -189,9 +187,6 @@ app.whenReady().then(async() => {
     const { db, dbPath } = dbResult;
     console.log('✅ Database initialized successfully')
     console.log('📁 Database location:', dbPath)
-    
-    // Start Local API Server
-    initializeServer(db);
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

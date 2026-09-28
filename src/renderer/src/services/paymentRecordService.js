@@ -50,47 +50,19 @@ export const getPaymentRecordById = async (id) => {
 };
 
 /**
- * Get payment records by Purchase Order ID
- * @param {number|string} poId - Purchase Order ID
- * @returns {Promise<Object>} - Payment records for the PO
+ * Get payment records for a sales order
+ * @param {Object} params - { recordType: 'sales', referenceId }
+ * @returns {Promise<Object>} - Payment records for the sales order
  */
-export const getPaymentRecordsByPO = async (poId) => {
+export const getPaymentRecordsByPO = async (params) => {
   try {
-    const response = await window.api.getPaymentRecordsByPO(poId);
+    const response = await window.api.getPaymentRecordsByPO(params);
     if (response.success) {
       return response.data;
     }
     throw new Error(response.message || 'Failed to fetch payment records');
   } catch (error) {
-    console.error(`Error fetching payment records for PO ${poId}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Get Purchase Order summary with payment information
- * @param {Object} filters - Filter, sort, and pagination options
- * @returns {Promise<Object>} - Object containing PO summary with payment info
- */
-export const getPOSummary = async (filters = {}) => {
-  try {
-    const response = await window.api.getPOSummary(filters);
-    if (response.success) {
-      const orders = response.data.map((order, index) => ({
-        ...order,
-        sno: (filters.page - 1) * filters.limit + index + 1
-      }));
-      return {
-        success: true,
-        data: orders,
-        total: response.total,
-        page: response.page,
-        limit: response.limit
-      };
-    }
-    throw new Error(response.message || 'Failed to fetch PO summary');
-  } catch (error) {
-    console.error('Error fetching PO summary:', error);
+    console.error(`Error fetching payment records for order:`, error);
     throw error;
   }
 };
@@ -161,7 +133,6 @@ export const paymentRecordService = {
   getPaymentRecords,
   getPaymentRecordById,
   getPaymentRecordsByPO,
-  getPOSummary,
   createPaymentRecord,
   updatePaymentRecord,
   deletePaymentRecord

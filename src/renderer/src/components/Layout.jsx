@@ -6,35 +6,16 @@ import {
   Settings,
   User,
   FileText,
-  FolderTree,
-  Receipt,
   ShoppingCart,
-  ShoppingBag,
   LogOut,
-  Tag,
   Users,
-  Package,
-  FileBarChart,
   ChevronDown,
   ChevronRight,
   Menu,
-  DollarSign,
-  ChartColumnBig,
   Banknote,
-  Barcode,
   UserPlus,
   Truck,
   UserCog,
-  CreditCard,
-  PcCase,
-  BookOpen,
-  TrendingUp,
-  PieChart,
-  BarChart3,
-  Activity,
-  Trash2,
-  ShoppingBagIcon,
-  SoupIcon,
   ShoppingBasket
 } from 'lucide-react'
 import WindowControls from './WindowControls'
@@ -87,32 +68,6 @@ const Layout = ({ children, onLogout, currentUser }) => {
       ]
     },
     {
-      id: 'purchase',
-      icon: ShoppingBag,
-      label: t('nav.purchase'),
-      isGroup: true,
-      subItems: [
-        { icon: ShoppingBag, label: t('nav.addPurchase'), path: '/purchases/new' },
-        { icon: FileText, label: t('nav.purchaseList'), path: '/purchases' },
-        { icon: Banknote, label: t('nav.paymentTracking'), path: '/purchases/payments' },
-        // { icon: ShoppingBagIcon, label: "Purchase POS", path: "/purchases/pos" }
-      ]
-    },
-    {
-      id: 'inventory',
-      icon: Package,
-      label: t('nav.inventory'),
-      isGroup: true,
-      subItems: [
-        { icon: PcCase, label: t('nav.products'), path: '/products' },
-        { icon: FolderTree, label: t('nav.categories'), path: '/categories' },
-        { icon: Tag, label: t('nav.brands'), path: '/brands' },
-        { icon: Barcode, label: t('nav.barcodeGeneration'), path: '/barcode-generator' },
-        // { icon: Barcode, label: t('nav.barcodeStickerRoller'), path: '/barcode-labels-v2' },
-        { icon: Trash2, label: t('nav.wastage'), path: '/wastage' }
-      ]
-    },
-    {
       id: 'parties',
       icon: Users,
       label: 'Parties', // Using hardcoded label 'Parties' as key might not exist
@@ -120,38 +75,6 @@ const Layout = ({ children, onLogout, currentUser }) => {
       subItems: [
         { icon: UserPlus, label: t('nav.customers'), path: '/customers', defaultSub: '/customers' },
         { icon: Truck, label: t('nav.suppliers'), path: '/suppliers', defaultSub: '/suppliers' }
-      ]
-    },
-    {
-      id: 'expenses',
-      icon: CreditCard,
-      label: t('nav.expenses'),
-      isGroup: true,
-      subItems: [
-        { icon: CreditCard, label: t('nav.expenseManagement'), path: '/expense-management' },
-        { icon: Banknote, label: 'Expense List', path: '/expenses' }
-      ]
-    },
-    {
-      id: 'reports',
-      icon: ChartColumnBig,
-      label: t('nav.reports'),
-      path: '/reports',
-      defaultSub: '/reports',
-      // Keeping reports nested as there are many
-      subItems: [
-        { label: t('nav.salesReport'), path: '/reports/sales' },
-        { label: t('nav.purchaseReport'), path: '/reports/purchase' },
-        { label: t('nav.profitLoss'), path: '/reports/profit-loss' },
-        { label: t('nav.stockReport'), path: '/reports/stock' },
-        { label: t('nav.lowStockReport'), path: '/reports/low-stock' },
-        { label: t('nav.customerReport'), path: '/reports/customer' },
-        { label: t('nav.supplierReport'), path: '/reports/supplier' },
-        { label: t('nav.paymentReport'), path: '/reports/payment' },
-        { label: t('nav.expenseReport'), path: '/reports/expense' },
-        { label: t('nav.productPerformance'), path: '/reports/product-performance' },
-        { label: t('nav.wastageReport'), path: '/reports/wastage' },
-        { label: t('nav.dailySummary'), path: '/reports/daily-summary' },
       ]
     },
     {
@@ -473,52 +396,7 @@ const Layout = ({ children, onLogout, currentUser }) => {
                   <ShoppingBasket size={18} className="group-hover:scale-110 transition-transform" />
                   <span>{t('common.newSale')}</span>
                 </button>
-                <button
-                  onClick={() => navigate('/purchases/pos')}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-medium text-sm group"
-                  title={t('common.createNewPurchase')}
-                >
-                  <ShoppingBagIcon size={18} className="group-hover:scale-110 transition-transform" />
-                  <span>{t('common.newPurchase')}</span>
-                </button>
               </div>
-
-              {/* Divider */}
-              {/* <div className="h-8 w-px bg-gray-300"></div> */}
-
-              {/* Quick Action Buttons */}
-              {/* <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => navigate('/products/new')}
-                  className="p-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-all group relative"
-                  title={t('common.addProduct')}
-                >
-                  <Package size={18} />
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                    {t('common.addProduct')}
-                  </span>
-                </button>
-                <button
-                  onClick={() => navigate('/customers/new')}
-                  className="p-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-lg transition-all group relative"
-                  title={t('common.addCustomer')}
-                >
-                  <UserPlus size={18} />
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                    {t('common.addCustomer')}
-                  </span>
-                </button>
-                <button
-                  onClick={() => navigate('/suppliers/new')}
-                  className="p-2 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded-lg transition-all group relative"
-                  title={t('common.addSupplier')}
-                >
-                  <Truck size={18} />
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                    {t('common.addSupplier')}
-                  </span>
-                </button>
-              </div> */}
             </div>
           </div>
 

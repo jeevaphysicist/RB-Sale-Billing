@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Store, User, Lock, Save, Loader2, RefreshCw, Printer, Eye, FileText, RotateCcw, LayoutTemplate, Shield, Barcode, CheckCircle2, Type } from 'lucide-react';
+import { Store, User, Lock, Save, Loader2, RefreshCw, Printer, Eye, FileText, RotateCcw, LayoutTemplate, Shield, Type } from 'lucide-react';
 import AccessibilitySettings from './AccessibilitySettings';
 import { toast } from 'sonner';
 import settingsService from '../../services/settingsService';
@@ -17,7 +17,7 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
 
   // Template States
-  const [templateTab, setTemplateTab] = useState('sales_order'); // 'sales_order' or 'purchase_order'
+  const [templateTab, setTemplateTab] = useState('sales_order'); // 'sales_order'
   const [templateSettings, setTemplateSettings] = useState({
     template_name: '80mm',
     config: {
@@ -238,88 +238,41 @@ const Settings = () => {
         cashier: 'Admin'
       };
 
-      if (templateTab === 'purchase_order') {
-        // Map for Purchase Order
-        previewOrder.po_number = 'PO-PREVIEW-001';
-        previewOrder.po_date = new Date().toISOString().split('T')[0];
-        previewOrder.supplier_name = 'Demo Supplier';
-        previewOrder.supplier_address = '123 Supplier St, Business Park';
-        previewOrder.contact_person = 'John Supplier';
-        previewOrder.contact_number = '9876543210';
-        previewOrder.status = 'Pending';
-        previewOrder.documentType = 'purchase_order'; // Important for handler dispatch
-
-        // Map Items
-        previewOrder.items = previewOrder.items.map(item => ({
-          product_id: item.product_id,
-          product_name: item.product_name,
-          hsn_code: item.hsnCode, // Map hsnCode to hsn_code
-          quantity: item.quantity,
-          unit: 'Piece',
-          unit_price: item.unit_price,
-          tax: item.tax_rate,
-          amount: item.final_amount
-        }));
-
-        // Map Totals
-        previewOrder.totals = {
-          subtotal_without_tax: previewOrder.calculations.amountBeforeTax,
-          total_tax: previewOrder.calculations.taxDetails.totalTaxAmount,
-          order_discount_amount: previewOrder.calculations.billDiscountAmount,
-          freight: 0,
-          insurance: 0,
-          other_charges: 0,
-          net_payable: previewOrder.calculations.grandTotal
-        };
-
-      } else {
-        // Map items to match pdfGenerator expectations for Sales Order
-        previewOrder.items = previewOrder.items.map(item => ({
-          ...item,
-          productName: item.product_name,
-          productCode: item.product_code,
-          unitPrice: item.unit_price,
-          finalAmount: item.final_amount
-        }));
-      }
+      // Map items to match pdfGenerator expectations for Sales Order
+      previewOrder.items = previewOrder.items.map(item => ({
+        ...item,
+        productName: item.product_name,
+        productCode: item.product_code,
+        unitPrice: item.unit_price,
+        finalAmount: item.final_amount
+      }));
 
       // Apply Preview Options Logic (Shared logic for toggle effects)
       if (!templateSettings.config.showTax) {
-        if (templateTab === 'purchase_order' && previewOrder.totals) {
-          previewOrder.totals.total_tax = 0;
-          previewOrder.items.forEach(i => i.tax = 0);
-        } else {
-          previewOrder.items.forEach(item => {
-            item.tax_rate = 0;
-            item.tax_amount = 0;
-            item.sgst_amount = 0;
-            item.cgst_amount = 0;
-            item.igst_amount = 0;
-          });
-          previewOrder.calculations.taxDetails = {
-            totalTaxAmount: 0,
-            totalSgst: 0,
-            totalCgst: 0,
-            totalIgst: 0
-          };
-          previewOrder.calculations.grandTotal = previewOrder.calculations.subtotal - previewOrder.calculations.billDiscountAmount;
-        }
+        previewOrder.items.forEach(item => {
+          item.tax_rate = 0;
+          item.tax_amount = 0;
+          item.sgst_amount = 0;
+          item.cgst_amount = 0;
+          item.igst_amount = 0;
+        });
+        previewOrder.calculations.taxDetails = {
+          totalTaxAmount: 0,
+          totalSgst: 0,
+          totalCgst: 0,
+          totalIgst: 0
+        };
+        previewOrder.calculations.grandTotal = previewOrder.calculations.subtotal - previewOrder.calculations.billDiscountAmount;
       }
 
       if (!templateSettings.config.showDiscount) {
-        if (templateTab === 'purchase_order' && previewOrder.totals) {
-          previewOrder.totals.order_discount_amount = 0;
-          // Update net payable roughly
-          previewOrder.totals.net_payable = previewOrder.totals.subtotal_without_tax + previewOrder.totals.total_tax;
-        } else {
-          previewOrder.items.forEach(item => {
-            item.discount_amount = 0;
-            item.discount_percent = 0;
-          });
-          previewOrder.calculations.billDiscountAmount = 0;
-          previewOrder.calculations.billDiscount = 0;
-          previewOrder.calculations.grandTotal = previewOrder.calculations.subtotal + (templateSettings.config.showTax ? 20.70 : 0);
-        }
+        previewOrder.items.forEach(item => {
+          item.discount_amount = 0;
+          item.discount_percent = 0;
+        });
+        previewOrder.calculations.billDiscountAmount = 0;
+        previewOrder.calculations.billDiscount = 0;
+        previewOrder.calculations.grandTotal = previewOrder.calculations.subtotal + (templateSettings.config.showTax ? 20.70 : 0);
       }
 
       // Check if this is an A4 GST or Non-GST invoice template
@@ -784,26 +737,6 @@ const Settings = () => {
                   >
                     {t('settings.templates.salesOrder')}
                   </button>
-                  <button
-                    onClick={() => setTemplateTab('barcode')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${templateTab === 'barcode'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
-                  >
-                    Barcode Labels
-                  </button>
-                  {/* Purchase Order Template Settings - Hidden for now */}
-                  {/* <button
-                    onClick={() => setTemplateTab('purchase_order')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      templateTab === 'purchase_order'
-                        ? 'border-blue-600 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    Purchase Order
-                  </button> */}
                 </div>
 
                 {templateLoading ? (
@@ -865,119 +798,10 @@ const Settings = () => {
                         </div>
                       )}
 
-                      {/* Barcode Label Templates - Only show when barcode tab is active */}
-                      {templateTab === 'barcode' && (
-                        <div className="space-y-6 pt-4 border-t border-gray-200">
-                          <label className="text-xs text-gray-500 font-medium">Barcode Label Templates</label>
-                          <div className="grid grid-cols-1 gap-3">
-                            <button
-                              onClick={() => setTemplateSettings(prev => ({
-                                ...prev,
-                                template_name: 'LabelRoll'
-                              }))}
-                              className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${templateSettings.template_name === 'LabelRoll'
-                                ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                : 'border-gray-200 hover:border-gray-300 text-gray-600'
-                                }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <Barcode size={24} />
-                                <div className="text-left">
-                                  <div className="text-sm font-medium">Barcode Sticker Roller (105mm)</div>
-                                  <div className="text-xs text-gray-500">
-                                    25mm × 25mm labels, 4 per row
-                                  </div>
-                                </div>
-                              </div>
-                              {templateSettings.template_name === 'LabelRoll' && (
-                                <CheckCircle2 size={20} className="text-blue-600" />
-                              )}
-                            </button>
-                          </div>
-
-                          <div className="space-y-4 pt-4 border-t border-gray-100">
-                            <label className="text-sm font-medium text-gray-700">Label Options</label>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-1.5">
-                                <label className="text-xs text-gray-500 uppercase tracking-wide">Label Gap (mm)</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="10"
-                                  step="0.5"
-                                  value={templateSettings.config.gap || 1.5}
-                                  onChange={(e) => setTemplateSettings(prev => ({
-                                    ...prev,
-                                    config: { ...prev.config, gap: parseFloat(e.target.value) || 0 }
-                                  }))}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="text-xs text-gray-500 uppercase tracking-wide">Font Size (pt)</label>
-                                <select
-                                  value={templateSettings.config.fontSize || 6}
-                                  onChange={(e) => setTemplateSettings(prev => ({
-                                    ...prev,
-                                    config: { ...prev.config, fontSize: parseInt(e.target.value) }
-                                  }))}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                >
-                                  <option value="5">5pt</option>
-                                  <option value="6">6pt</option>
-                                  <option value="7">7pt</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-3 pt-2">
-                              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                                <input
-                                  type="checkbox"
-                                  checked={templateSettings.config.showName !== false}
-                                  onChange={(e) => setTemplateSettings(prev => ({
-                                    ...prev,
-                                    config: { ...prev.config, showName: e.target.checked }
-                                  }))}
-                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <span className="text-sm font-medium text-gray-900">Show Product Name</span>
-                              </label>
-
-                              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                                <input
-                                  type="checkbox"
-                                  checked={templateSettings.config.showPrice !== false}
-                                  onChange={(e) => setTemplateSettings(prev => ({
-                                    ...prev,
-                                    config: { ...prev.config, showPrice: e.target.checked }
-                                  }))}
-                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <span className="text-sm font-medium text-gray-900">Show Price</span>
-                              </label>
-
-                              <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                                <input
-                                  type="checkbox"
-                                  checked={templateSettings.config.showBarcodeText !== false}
-                                  onChange={(e) => setTemplateSettings(prev => ({
-                                    ...prev,
-                                    config: { ...prev.config, showBarcodeText: e.target.checked }
-                                  }))}
-                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <span className="text-sm font-medium text-gray-900">Show Barcode Text</span>
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Font Settings - Hide for A4 Templates and Barcode Labels */}
-                    {!templateSettings.template_name?.startsWith('A4') && templateSettings.template_name !== 'LabelRoll' && (
+                    {/* Font Settings - Hide for A4 Templates */}
+                    {!templateSettings.template_name?.startsWith('A4') && (
                       <div className="space-y-3">
                         <label className="text-sm font-medium text-gray-700">{t('settings.templates.typography')}</label>
                         <div className="grid grid-cols-1 gap-4">
@@ -1559,9 +1383,8 @@ const Settings = () => {
                         src={`${previewUrl}#toolbar=0&view=FitH`}
                         className={`w-full h-full rounded shadow-lg bg-white ${templateSettings.template_name === '80mm' ? 'max-w-[300px]' :
                           templateSettings.template_name === '50mm' ? 'max-w-[200px]' :
-                            templateSettings.template_name === 'LabelRoll' ? 'max-w-[105mm]' :
-                              (templateSettings.template_name === 'A4-GST' || templateSettings.template_name === 'A4-NonGST') ? 'max-w-[600px]' :
-                                'max-w-full'
+                            (templateSettings.template_name === 'A4-GST' || templateSettings.template_name === 'A4-NonGST') ? 'max-w-[600px]' :
+                              'max-w-full'
                           }`}
                         title="Invoice Preview"
                       />
@@ -1571,7 +1394,7 @@ const Settings = () => {
                         <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-lg text-[10px] font-mono backdrop-blur-md border border-white/10 shadow-lg pointer-events-none">
                           <span className="text-gray-400">PDF Size: </span>
                           <span>
-                            {previewDimensions.widthMM ? previewDimensions.widthMM.toFixed(1) : (templateSettings.template_name === 'LabelRoll' ? '105.0' : '80.0')}mm × {previewDimensions.heightMM ? previewDimensions.heightMM.toFixed(1) : '...'}mm
+                            {previewDimensions.widthMM ? previewDimensions.widthMM.toFixed(1) : '80.0'}mm × {previewDimensions.heightMM ? previewDimensions.heightMM.toFixed(1) : '...'}mm
                           </span>
                         </div>
                       )}

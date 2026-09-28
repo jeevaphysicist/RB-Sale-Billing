@@ -7,13 +7,6 @@ export let globalDb = null;
 const runMigrations = (db, callback) => {
   const migrations = [
     {
-      name: 'add_tax_included_in_price_to_purchase_orders',
-      sql: `
-        ALTER TABLE purchase_orders 
-        ADD COLUMN tax_included_in_price BOOLEAN DEFAULT 0
-      `
-    },
-    {
       name: 'add_loyalty_points_to_customers',
       sql: `
         ALTER TABLE customers 
@@ -77,22 +70,9 @@ const runMigrations = (db, callback) => {
     { name: 'add_loyalty_points_amount', sql: `ALTER TABLE sales_orders ADD COLUMN loyalty_points_amount REAL DEFAULT 0` },
     { name: 'add_notes', sql: `ALTER TABLE sales_orders ADD COLUMN notes TEXT` },
     { name: 'add_balance_amount', sql: `ALTER TABLE sales_orders ADD COLUMN balance_amount REAL DEFAULT 0` },
-    { name: 'add_notes_to_products', sql: `ALTER TABLE products ADD COLUMN notes TEXT` },
-    { 
+    {
       name: 'add_unique_mobile_number_index',
       sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_mobile_number ON customers(mobile_number) WHERE mobile_number != '' AND mobile_number IS NOT NULL`
-    },
-    {
-      name: 'add_payment_status_to_purchase_orders',
-      sql: `ALTER TABLE purchase_orders ADD COLUMN payment_status TEXT DEFAULT 'pending'`
-    },
-    {
-      name: 'add_balance_amount_to_purchase_orders',
-      sql: `ALTER TABLE purchase_orders ADD COLUMN balance_amount REAL DEFAULT 0`
-    },
-    {
-      name: 'add_received_amount_to_purchase_orders',
-      sql: `ALTER TABLE purchase_orders ADD COLUMN received_amount REAL DEFAULT 0`
     },
     {
       name: 'create_customer_transactions_table',
@@ -115,33 +95,6 @@ const runMigrations = (db, callback) => {
       )`
     },
     {
-      name: 'add_default_wastage_to_products',
-      sql: `ALTER TABLE products ADD COLUMN default_wastage REAL DEFAULT 0`
-    },
-    {
-      name: 'add_wastage_qty_to_sales_order_items',
-      sql: `ALTER TABLE sales_order_items ADD COLUMN wastage_qty REAL DEFAULT 0`
-    },
-    {
-      name: 'create_wastage_table',
-      sql: `
-        CREATE TABLE IF NOT EXISTS wastage (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          product_id INTEGER NOT NULL,
-          quantity REAL NOT NULL,
-          reason TEXT,
-          wastage_date DATE DEFAULT (date('now')),
-          created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-          created_by TEXT,
-          FOREIGN KEY (product_id) REFERENCES products(id)
-        )
-      `
-    },
-    {
-      name: 'add_category_to_wastage',
-      sql: `ALTER TABLE wastage ADD COLUMN category TEXT`
-    },
-    {
       name: 'add_district_to_store_settings',
       sql: `ALTER TABLE store_settings ADD COLUMN district TEXT`
     },
@@ -150,16 +103,8 @@ const runMigrations = (db, callback) => {
       sql: `ALTER TABLE store_settings ADD COLUMN pan TEXT`
     },
     {
-      name: 'add_unit_to_products',
-      sql: `ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'Piece'`
-    },
-    {
       name: 'add_unit_to_sales_order_items',
       sql: `ALTER TABLE sales_order_items ADD COLUMN unit TEXT`
-    },
-    {
-      name: 'set_default_unit_products',
-      sql: `UPDATE products SET unit = 'Piece' WHERE unit IS NULL OR unit = ''`
     },
 /*
     {
@@ -178,19 +123,8 @@ const runMigrations = (db, callback) => {
 */
 
     {
-      name: 'add_wholesale_dealer_price_to_products',
-      sql: `
-        ALTER TABLE products ADD COLUMN wholesale_price REAL DEFAULT 0;
-        ALTER TABLE products ADD COLUMN dealer_price REAL DEFAULT 0;
-      `
-    },
-    {
       name: 'add_price_category_to_sales_orders',
       sql: `ALTER TABLE sales_orders ADD COLUMN price_category TEXT DEFAULT 'Retail'`
-    },
-    {
-      name: 'add_icon_to_categories',
-      sql: `ALTER TABLE categories ADD COLUMN icon TEXT`
     },
     {
       name: 'add_god_name_to_store_settings',
@@ -199,6 +133,22 @@ const runMigrations = (db, callback) => {
     {
       name: 'add_fassai_no_to_store_settings',
       sql: `ALTER TABLE store_settings ADD COLUMN fassai_no TEXT`
+    },
+    {
+      name: 'drop_removed_modules_tables',
+      sql: `
+        DROP TABLE IF EXISTS purchase_order_items;
+        DROP TABLE IF EXISTS purchase_order_totals;
+        DROP TABLE IF EXISTS purchase_orders;
+        DROP TABLE IF EXISTS product_images;
+        DROP TABLE IF EXISTS wastage;
+        DROP TABLE IF EXISTS stock_movements;
+        DROP TABLE IF EXISTS expense_records;
+        DROP TABLE IF EXISTS expenses;
+        DROP TABLE IF EXISTS products;
+        DROP TABLE IF EXISTS categories;
+        DROP TABLE IF EXISTS brands;
+      `
     }
   ];
 
@@ -341,74 +291,6 @@ export const initDB = (dbPath) => {
         db.run("PRAGMA foreign_keys = ON", () => {
         const tables = [
           {
-            name:"categories",
-            sql: `
-              CREATE TABLE IF NOT EXISTS categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT,
-                status TEXT DEFAULT 'active',
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes'))
-              )
-            `
-          },
-          {
-            name: 'brands',
-            sql: `
-              CREATE TABLE IF NOT EXISTS brands (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                website TEXT,
-                description TEXT,
-                status TEXT DEFAULT 'active',
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes'))
-              )
-            `
-          },
-          {
-            name: 'products',
-            sql: `
-              CREATE TABLE IF NOT EXISTS products (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                product_name TEXT NOT NULL,
-                product_code TEXT UNIQUE,
-                hsn_code TEXT,
-                barcode TEXT,
-                category_id INTEGER,
-                brand_id INTEGER,
-                unit TEXT DEFAULT 'Piece',
-                purchase_price REAL DEFAULT 0,
-                selling_price REAL DEFAULT 0,
-                mrp REAL DEFAULT 0,
-                discount REAL DEFAULT 0,
-                tax_rate REAL DEFAULT 0,
-                landing_price REAL GENERATED ALWAYS AS (
-                    purchase_price + (purchase_price * tax_rate / 100)
-                ) VIRTUAL,
-                current_stock REAL DEFAULT 0,
-                minimum_stock REAL DEFAULT 0,
-                opening_stock REAL DEFAULT 0,
-                reorder_level REAL DEFAULT 0,
-                supplier_ids TEXT,
-                product_image TEXT,
-                description TEXT,
-                tags TEXT,
-                status TEXT DEFAULT 'Active',
-                product_type TEXT DEFAULT 'Physical',
-                warranty_period TEXT,
-                expiry_date TEXT,
-                batch_no TEXT,
-                serial_no TEXT,
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                FOREIGN KEY (category_id) REFERENCES categories(id),
-                FOREIGN KEY (brand_id) REFERENCES brands(id)
-              )
-            `
-          },
-          {
             name: 'customers',
             sql: `
               CREATE TABLE IF NOT EXISTS customers (
@@ -487,126 +369,11 @@ export const initDB = (dbPath) => {
             `
           },
           {
-            name: 'product_images',
-            sql: `
-              CREATE TABLE IF NOT EXISTS product_images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                product_id INTEGER NOT NULL,
-                image_path TEXT NOT NULL,
-                image_name TEXT NOT NULL,
-                file_size INTEGER,
-                mime_type TEXT,
-                is_primary BOOLEAN DEFAULT 0,
-                display_order INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-              )
-            `
-          },
-          {
-            name: 'expenses',
-            sql: `
-              CREATE TABLE IF NOT EXISTS expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                type TEXT DEFAULT 'expense',
-                description TEXT,
-                status TEXT DEFAULT 'active',
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes'))
-              )
-            `
-          },
-          {
-            name: 'purchase_orders',
-            sql: `
-              CREATE TABLE IF NOT EXISTS purchase_orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                po_number TEXT UNIQUE NOT NULL,
-                po_date DATE NOT NULL,
-                
-                supplier_id INTEGER,
-                supplier_name TEXT,
-                supplier_address TEXT,
-                supplier_gst TEXT,
-                contact_person TEXT,
-                contact_number TEXT,
-                email TEXT,
-                
-                payment_terms TEXT,
-                delivery_date DATE,
-                delivery_location TEXT,
-                remarks TEXT,
-                status TEXT DEFAULT 'Draft',
-                
-                freight REAL DEFAULT 0,
-                insurance REAL DEFAULT 0,
-                other_charges REAL DEFAULT 0,
-                order_discount REAL DEFAULT 0,
-                order_discount_type TEXT DEFAULT 'percentage',
-                
-                enable_tax BOOLEAN DEFAULT 1,
-                tax_type TEXT DEFAULT 'SGST',
-                tax_included_in_price BOOLEAN DEFAULT 0,
-                
-                round_off REAL DEFAULT 0,
-                net_payable REAL DEFAULT 0,
-                
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                
-                FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
-              )
-            `
-          },
-          {
-            name: 'purchase_order_items',
-            sql: `
-              CREATE TABLE IF NOT EXISTS purchase_order_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                po_id INTEGER NOT NULL,
-                product_id INTEGER,
-                hsn_code TEXT,
-                quantity REAL DEFAULT 0,
-                unit TEXT,
-                unit_price REAL DEFAULT 0,
-                discount REAL DEFAULT 0,
-                tax REAL DEFAULT 0,
-                amount REAL DEFAULT 0,
-                FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
-                FOREIGN KEY (product_id) REFERENCES products(id)
-              )
-            `
-          },
-          {
-            name: 'purchase_order_totals',
-            sql: `
-              CREATE TABLE IF NOT EXISTS purchase_order_totals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                po_id INTEGER NOT NULL,
-                subtotal_without_tax REAL DEFAULT 0,
-                total_tax REAL DEFAULT 0,
-                sgst REAL DEFAULT 0,
-                cgst REAL DEFAULT 0,
-                igst REAL DEFAULT 0,
-                subtotal REAL DEFAULT 0,
-                order_discount_amount REAL DEFAULT 0,
-                subtotal_after_discount REAL DEFAULT 0,
-                freight REAL DEFAULT 0,
-                insurance REAL DEFAULT 0,
-                other_charges REAL DEFAULT 0,
-                round_off REAL DEFAULT 0,
-                net_payable REAL DEFAULT 0,
-                FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE
-              )
-            `
-          },
-          {
             name: 'payment_records',
             sql: `
               CREATE TABLE IF NOT EXISTS payment_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                record_type TEXT NOT NULL CHECK(record_type IN ('purchase', 'sales')),
+                record_type TEXT NOT NULL CHECK(record_type IN ('sales')),
                 reference_id INTEGER NOT NULL,
                 payment_date DATE NOT NULL,
                 payment_amount REAL NOT NULL,
@@ -618,26 +385,6 @@ export const initDB = (dbPath) => {
                 notes TEXT,
                 created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
                 updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes'))
-              )
-            `
-          },
-          {
-            name: 'expense_records',
-            sql: `
-              CREATE TABLE IF NOT EXISTS expense_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                expense_number TEXT UNIQUE,
-                expense_date DATE NOT NULL,
-                category_id INTEGER,
-                amount REAL NOT NULL,
-                payment_mode TEXT,
-                reference_number TEXT,
-                paid_by TEXT,
-                description TEXT,
-                status TEXT DEFAULT 'Active',
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                FOREIGN KEY (category_id) REFERENCES expenses(id)
               )
             `
           }
@@ -705,7 +452,6 @@ export const initDB = (dbPath) => {
               CREATE TABLE IF NOT EXISTS sales_order_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 order_id INTEGER NOT NULL,
-                product_id INTEGER,
                 product_name TEXT,
                 product_code TEXT,
                 hsn_code TEXT,
@@ -730,8 +476,7 @@ export const initDB = (dbPath) => {
                 
                 created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
                 
-                FOREIGN KEY (order_id) REFERENCES sales_orders(id) ON DELETE CASCADE,
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                FOREIGN KEY (order_id) REFERENCES sales_orders(id) ON DELETE CASCADE
               )
             `
           },
@@ -771,26 +516,6 @@ export const initDB = (dbPath) => {
             `
           },
           {
-            name: 'stock_movements',
-            sql: `
-              CREATE TABLE IF NOT EXISTS stock_movements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                product_id INTEGER NOT NULL,
-                reference_type TEXT NOT NULL, -- 'sales_order', 'purchase_order', 'adjustment', 'opening_stock'
-                reference_id INTEGER,         -- ID of the order or adjustment
-                reference_number TEXT,        -- Invoice No or PO No
-                transaction_type TEXT NOT NULL, -- 'IN', 'OUT'
-                quantity REAL NOT NULL,
-                previous_stock REAL,
-                new_stock REAL,
-                reason TEXT,
-                created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
-                created_by TEXT,
-                FOREIGN KEY (product_id) REFERENCES products(id)
-              )
-            `
-          },
-          {
             name: 'store_settings',
             sql: `
               CREATE TABLE IF NOT EXISTS store_settings (
@@ -820,7 +545,7 @@ export const initDB = (dbPath) => {
             sql: `
               CREATE TABLE IF NOT EXISTS template_settings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                document_type TEXT NOT NULL, -- 'sales_order', 'purchase_order'
+                document_type TEXT NOT NULL, -- 'sales_order'
                 template_name TEXT DEFAULT '80mm', -- 'A4', '80mm', '50mm'
                 config TEXT, -- JSON string for font, margins, etc.
                 is_active BOOLEAN DEFAULT 1,
@@ -947,15 +672,6 @@ export const initDB = (dbPath) => {
           `
         });
 
-        tables.push({
-          name: 'template_settings_seed_purchase',
-          sql: `
-            INSERT INTO template_settings (document_type, template_name, config, is_active)
-            SELECT 'purchase_order', 'A4', '{"fontFamily":"Helvetica","showTax":true,"showDiscount":true}', 1
-            WHERE NOT EXISTS (SELECT 1 FROM template_settings WHERE document_type = 'purchase_order')
-          `
-        });
-
         const createTableSequentially = (index = 0) => {
           if (index >= tables.length) {
             // Run migrations after tables are created
@@ -988,18 +704,18 @@ export const debugInitDB = async (dbPath) => {
 
 export const verifyDatabase = (db) => {
   return new Promise((resolve, reject) => {
-    db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='categories';", (err, row) => {
+    db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='sales_orders';", (err, row) => {
       if (err) {
-        console.error('❌ Error checking for categories table:', err.message);
+        console.error('❌ Error checking for sales_orders table:', err.message);
         return reject(err);
       }
-      
+
       if (!row) {
-        console.error('❌ Categories table does not exist in the database');
+        console.error('❌ Sales orders table does not exist in the database');
         return resolve(false);
       }
-      
-      console.log('✅ Categories table exists');
+
+      console.log('✅ Sales orders table exists');
       resolve(true);
     });
   });

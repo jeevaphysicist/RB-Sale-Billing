@@ -6,16 +6,12 @@ import WindowControls from '../../../components/WindowControls';
 import POSHeader from '../../../components/POSHeader';
 import ConfirmationDialog from '../../../components/ConfirmationDialog';
 import PrintPreviewModal from '../../../components/PrintPreviewModal';
-import ProductAddEditForm from '../../Products/AddEditForm';
 import CustomerAddEditForm from '../../Masters/Customer/AddEditForm';
-import { productService } from '../../../services/productService';
 import { customerService } from '../../../services/customerService';
 import { salesOrderService } from '../../../services/salesOrderService';
-import { getCategories } from '../../../services/api';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../contexts/authContext';
-import { transliterateToTamil, createSearchTerms, containsTamil } from '../../../utils/transliteration';
 
 const POSBillingSystem = () => {
   const { t } = useTranslation();
@@ -37,21 +33,18 @@ const POSBillingSystem = () => {
       if (result.success && result.data) {
         const order = result.data;
 
-        // Map order items to bill items format
+        // Map order items to bill items format (free-text line items, no product master)
         const billItems = order.items.map(item => ({
-          id: item.product_id,
+          id: item.id,
           name: item.product_name,
           code: item.product_code || '',
           price: item.unit_price,
           mrp: item.mrp || 0,
           qty: item.quantity,
           discount: item.discount_percent || 0,
-          stock: 9999,
           category: item.category || 'General',
           hsnCode: item.hsn_code || '',
           tax: item.tax_rate || 0,
-          image: item.product_image || null,
-          wastage: item.wastage_qty || 0,
           unit: item.unit || 'Piece'
         }));
 
@@ -161,17 +154,6 @@ const POSBillingSystem = () => {
   const STORAGE_KEY_TABS = 'pos_billing_tabs';
   const STORAGE_KEY_ACTIVE_TAB = 'pos_billing_active_tab';
   const STORAGE_KEY_NEXT_TAB_ID = 'pos_billing_next_tab_id';
-  const STORAGE_KEY_STOCK_VALIDATION = 'pos_enforce_stock_validation';
-
-  const loadStockValidationSetting = () => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_STOCK_VALIDATION);
-      if (saved !== null) return saved === 'true';
-    } catch (error) {
-      console.error('Error loading stock validation setting:', error);
-    }
-    return true;
-  };
 
   // Helper functions for localStorage persistence
   const getDefaultTabs = () => [
@@ -272,36 +254,17 @@ const POSBillingSystem = () => {
       return;
     }
 
+    // Determine a default price level label from the customer's price category.
+    // Manually entered items have no live product price table to switch between,
+    // so we only tag the bill with the price level - item prices are left as typed.
     const priceCategory = (customer.price_category || 'Retail').toLowerCase();
 
     let newGlobalPriceLevel = 'Retail';
     if (priceCategory.includes('wholesale')) newGlobalPriceLevel = 'Wholesale';
     else if (priceCategory.includes('dealer') || priceCategory.includes('special') || priceCategory.includes('distributor')) newGlobalPriceLevel = 'Dealer';
 
-    // Update all existing items with new price based on category
-    const updatedItems = activeTab.billItems.map(item => {
-      let newPrice = item.price;
-
-      if (newGlobalPriceLevel === 'Wholesale' && item.wholesalePrice > 0) {
-        newPrice = item.wholesalePrice;
-      } else if (newGlobalPriceLevel === 'Dealer' && item.dealerPrice > 0) {
-        newPrice = item.dealerPrice;
-      } else {
-        if (item.originalPrice) {
-          newPrice = item.originalPrice;
-        }
-      }
-
-      return {
-        ...item,
-        price: newPrice,
-        priceLevel: newGlobalPriceLevel
-      };
-    });
-
     updateActiveTab({
       selectedCustomer: customer,
-      billItems: updatedItems,
       priceLevel: newGlobalPriceLevel
     });
   };
@@ -314,27 +277,29 @@ const POSBillingSystem = () => {
   };
 
   // Shared states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tamilPreview, setTamilPreview] = useState(''); // For showing transliteration preview
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
-  const [selectedProductIndex, setSelectedProductIndex] = useState(0);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showAddCustomerForm, setShowAddCustomerForm] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [products, setProducts] = useState([]);
-  const [productsLoading, setProductsLoading] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState('all');
   const [customers, setCustomers] = useState([]);
   const [customersLoading, setCustomersLoading] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
 
-  const searchInputRef = useRef(null);
-  const dropdownRef = useRef(null);
-  const selectedProductRef = useRef(null);
+  // Manual line-item entry form (replaces the old live product search/pick UI)
+  const getDefaultNewItemForm = () => ({
+    name: '',
+    hsnCode: '',
+    category: '',
+    unit: 'Piece',
+    qty: 1,
+    price: '',
+    mrp: '',
+    discount: 0,
+    tax: 0
+  });
+  const [newItemForm, setNewItemForm] = useState(getDefaultNewItemForm());
+
+  const itemNameInputRef = useRef(null);
   const discountInputRef = useRef(null);
   const loyaltyPointsInputRef = useRef(null);
-  const preventDropdownReopenRef = useRef(false);
   const billItemsContainerRef = useRef(null);
   const lastUpdatedItemRef = useRef(null);
   const splitPaymentCashRef = useRef(null);
@@ -344,10 +309,7 @@ const POSBillingSystem = () => {
   const [lastUpdatedItemId, setLastUpdatedItemId] = useState(null);
   // Tax settings are now per-tab (removed global state)
   const [orderSummaryExpanded, setOrderSummaryExpanded] = useState(false);
-  const [barcodeDetected, setBarcodeDetected] = useState(false);
-  const [barcodeScanMode, setBarcodeScanMode] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [enforceStockValidation, setEnforceStockValidation] = useState(() => loadStockValidationSetting());
 
 
   // Success Modal & Printing States
@@ -385,71 +347,6 @@ const POSBillingSystem = () => {
     }
   };
 
-  const getPriceForLevel = (product, priceLevel) => {
-    if (priceLevel === 'Wholesale' && product.wholesalePrice > 0) {
-      return product.wholesalePrice;
-    }
-    if (priceLevel === 'Dealer' && product.dealerPrice > 0) {
-      return product.dealerPrice;
-    }
-    return product.price;
-  };
-
-  const syncBillItemsWithProducts = (billItems, productsList, tabPriceLevel) => {
-    if (!billItems?.length || !productsList?.length) return billItems;
-
-    const productMap = new Map(productsList.map(p => [p.id, p]));
-
-    return billItems.map(item => {
-      const product = productMap.get(item.id);
-      if (!product) return item;
-
-      const level = item.priceLevel || tabPriceLevel || 'Retail';
-      const isCustomPrice = level === 'Custom';
-      const price = isCustomPrice ? item.price : getPriceForLevel(product, level);
-
-      return {
-        ...item,
-        name: product.name,
-        code: product.code,
-        barcode: product.barcode,
-        category: product.category,
-        category_id: product.category_id,
-        stock: product.stock,
-        mrp: product.mrp,
-        tax: product.tax,
-        hsnCode: product.hsnCode,
-        image: product.image,
-        unit: product.unit,
-        wholesalePrice: product.wholesalePrice,
-        dealerPrice: product.dealerPrice,
-        originalPrice: product.price,
-        price
-      };
-    });
-  };
-
-  const applyProductSyncToAllBills = (productsList) => {
-    if (!productsList?.length) return;
-
-    setTabs(prevTabs =>
-      prevTabs.map(tab => ({
-        ...tab,
-        billItems: syncBillItemsWithProducts(tab.billItems, productsList, tab.priceLevel)
-      }))
-    );
-
-    if (id) {
-      setEditOrder(prev =>
-        prev
-          ? {
-              ...prev,
-              billItems: syncBillItemsWithProducts(prev.billItems, productsList, prev.priceLevel)
-            }
-          : prev
-      );
-    }
-  };
 
   // Tab Management Functions
   const createNewTab = async () => {
@@ -565,76 +462,6 @@ const POSBillingSystem = () => {
 
   const switchTab = (tabId) => {
     setActiveTabId(tabId);
-    setSearchQuery('');
-    setShowProductDropdown(false);
-  };
-
-  // Fetch active products from API
-  const fetchActiveProducts = async () => {
-    try {
-      setProductsLoading(true);
-      const response = await productService.getProducts({
-        searchTerm: '',
-        sortKey: 'name',
-        sortDirection: 'ASC',
-        page: 1,
-        limit: 1000, // Fetch all products for POS
-        status: 'active' // Only fetch active products
-      });
-
-      if (response.success) {
-        // Map API response and fetch images for each product
-        const productsWithImages = await Promise.all(
-          response.data.map(async (product) => {
-            let imageData = null;
-
-            // Fetch product images using the same method as product edit form
-            try {
-              const imagesResponse = await window.api.getProductImages(product.id);
-              if (imagesResponse.success && imagesResponse.data.length > 0) {
-                // Get the primary image (first one)
-                const primaryImage = imagesResponse.data[0];
-                if (primaryImage.imageData) {
-                  imageData = primaryImage.imageData;
-                }
-              }
-            } catch (error) {
-              console.error(`Error loading image for product ${product.id}:`, error);
-            }
-
-            return {
-              id: product.id,
-              name: product.product_name || product.name,
-              code: product.product_code || product.code || product.sku,
-              barcode: product.barcode || product.product_barcode || '',
-              category: product.category_name || product.category,
-              category_id: product.category_id,
-              price: parseFloat(product.selling_price || product.price || 0),
-              wholesalePrice: parseFloat(product.wholesale_price || 0),
-              dealerPrice: parseFloat(product.dealer_price || 0),
-              mrp: parseFloat(product.mrp || 0),
-              stock: parseFloat(product.current_stock || product.stock || 0),
-              tax: parseFloat(product.tax_rate || product.tax || 0),
-              hsnCode: product.hsn_code || product.hsnCode || '',
-              image: imageData,
-              default_wastage: product.default_wastage || 0,
-              unit: product.unit || 'Piece'
-            };
-          })
-        );
-
-        setProducts(productsWithImages);
-        applyProductSyncToAllBills(productsWithImages);
-        // toast.success(`Loaded ${productsWithImages.length} active products`);
-      } else {
-        // toast.error('Failed to load products');
-      }
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      // toast.error('Failed to load products');
-    } finally {
-      setProductsLoading(false);
-    }
   };
 
   // Fetch customers from API
@@ -778,24 +605,10 @@ const POSBillingSystem = () => {
     return defaultWalkInCustomer;
   };
 
-  // Fetch categories from API
-  const fetchCategories = async () => {
-    try {
-      const response = await getCategories({ limit: 1000 });
-      if (response.success) {
-        setCategories(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
-
   useEffect(() => {
     const initializeData = async () => {
       await ensureWalkInCustomer();
-      await fetchActiveProducts();
       await fetchCustomers();
-      await fetchCategories();
     };
     initializeData();
 
@@ -851,181 +664,65 @@ const POSBillingSystem = () => {
     }
   }, [nextTabId]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_STOCK_VALIDATION, String(enforceStockValidation));
-    } catch (error) {
-      console.error('Error saving stock validation setting:', error);
-    }
-  }, [enforceStockValidation]);
-
-  // Auto-focus search input when barcode scan mode is activated
-  useEffect(() => {
-    if (barcodeScanMode && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [barcodeScanMode]);
-
-
-  // Enhanced product filtering with Tamil transliteration support and Category selection
-  const filteredProducts = products.filter(product => {
-    // If category is selected, filter by it
-    const matchesCategory = selectedCategoryId === 'all' ||
-      product.category_id === selectedCategoryId;
-
-    if (!matchesCategory) return false;
-
-    if (!searchQuery) {
-      // Show products of selected category when search is empty (up to 30)
-      const productsInCategory = products.filter(p => selectedCategoryId === 'all' || p.category_id === selectedCategoryId);
-      return productsInCategory.indexOf(product) < 30;
-    }
-
-    // Create search terms (original + Tamil transliteration)
-    const searchTerms = createSearchTerms(searchQuery);
-
-    // Check if any search term matches product fields
-    return searchTerms.some(term => {
-      const query = term.toLowerCase();
-      return (
-        (product.name && product.name.toLowerCase().includes(query)) ||
-        (product.code && product.code.toLowerCase().includes(query)) ||
-        (product.barcode && product.barcode.toLowerCase().includes(query)) ||
-        (product.hsnCode && product.hsnCode.toLowerCase().includes(query)) ||
-        (product.category && product.category.toLowerCase().includes(query)) ||
-        (product.id && product.id.toString().includes(query))
-      );
-    });
-  });
-
-  // Update Tamil preview when search query changes
-  useEffect(() => {
-    if (searchQuery && /[a-zA-Z]/.test(searchQuery)) {
-      const tamil = transliterateToTamil(searchQuery);
-      if (tamil && tamil !== searchQuery) {
-        setTamilPreview(tamil);
-      } else {
-        setTamilPreview('');
-      }
-    } else {
-      setTamilPreview('');
-    }
-  }, [searchQuery]);
-
-  // Reset selected index when filtered products change
-  useEffect(() => {
-    setSelectedProductIndex(0);
-  }, [searchQuery, products, selectedCategoryId]);
-
-  // Scroll selected product into view
-  useEffect(() => {
-    if (selectedProductRef.current && showProductDropdown) {
-      selectedProductRef.current.scrollIntoView({
-        behavior: 'auto',
-        block: 'nearest',
-        inline: 'nearest'
-      });
-    }
-  }, [selectedProductIndex, showProductDropdown]);
-
-  const addItemToBill = (product) => {
-    if (enforceStockValidation && product.stock <= 0) {
-      toast.error(t('sales.pos.outOfStock', { product: product.name }), {
-        duration: 3000,
-        icon: '⚠️'
-      });
+  // Add a manually entered line item to the bill (replaces the old
+  // catalog-driven addItemToBill; there is no live product master anymore).
+  const addManualItemToBill = () => {
+    const name = (newItemForm.name || '').trim();
+    if (!name) {
+      toast.error(t('sales.pos.validation.itemNameRequired'));
+      itemNameInputRef.current?.focus();
       return;
     }
 
-    const existingItem = activeTab.billItems.find(item => item.id === product.id);
-    const isExistingItem = !!existingItem;
-
-    // Determine price based on current global price level
-    let finalPrice = product.price; // Default Retail
-    const currentPriceLevel = activeTab.priceLevel || 'Retail';
-
-    if (currentPriceLevel === 'Wholesale' && product.wholesalePrice > 0) {
-      finalPrice = product.wholesalePrice;
-    } else if (currentPriceLevel === 'Dealer' && product.dealerPrice > 0) {
-      finalPrice = product.dealerPrice;
+    const qty = parseFloat(newItemForm.qty);
+    if (!qty || qty <= 0) {
+      toast.error(t('sales.pos.validation.invalidQty', { index: 1 }));
+      return;
     }
 
-    if (existingItem) {
-      if (enforceStockValidation && existingItem.qty + 1 > product.stock) {
-        toast.warning(t('sales.pos.insufficientStock', { stock: product.stock, product: product.name }), {
-          duration: 3000,
-          icon: '⚠️'
-        });
-        return;
-      }
-
-      updateActiveTab({
-        billItems: activeTab.billItems.map(item =>
-          item.id === product.id ? { ...item, qty: item.qty + 1 } : item
-        )
-      });
-    } else {
-      updateActiveTab({
-        billItems: [...activeTab.billItems, {
-          ...product,
-          qty: 1,
-          unit: product.unit || 'Piece',
-          wastage: product.default_wastage || 0,
-          discount: 0,
-          price: finalPrice,
-          originalPrice: product.price, // Keep track of retail price
-          priceLevel: currentPriceLevel // Track which level is used
-        }]
-      });
+    const price = parseFloat(newItemForm.price);
+    if (isNaN(price) || price < 0) {
+      toast.error(t('sales.pos.validation.invalidPrice', { index: 1 }));
+      return;
     }
 
-    // Highlight the added/updated item
-    setLastUpdatedItemId(product.id);
+    const newBillItem = {
+      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      code: '',
+      price,
+      mrp: parseFloat(newItemForm.mrp) || 0,
+      qty,
+      discount: Math.min(Math.max(parseFloat(newItemForm.discount) || 0, 0), 100),
+      category: (newItemForm.category || '').trim(),
+      hsnCode: (newItemForm.hsnCode || '').trim(),
+      tax: parseFloat(newItemForm.tax) || 0,
+      unit: (newItemForm.unit || '').trim() || 'Piece'
+    };
 
-    // Scroll behavior: if existing item, scroll to that row; if new item, scroll to bottom
+    updateActiveTab({
+      billItems: [...activeTab.billItems, newBillItem]
+    });
+
+    // Highlight the newly added item and scroll to it
+    setLastUpdatedItemId(newBillItem.id);
     setTimeout(() => {
-      if (isExistingItem) {
-        // Scroll to the existing item row with some top margin
-        if (lastUpdatedItemRef.current) {
-          lastUpdatedItemRef.current.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
-          });
-        }
-      } else {
-        // Scroll to bottom for newly added item
-        if (billItemsContainerRef.current) {
-          billItemsContainerRef.current.scrollTo({
-            top: billItemsContainerRef.current.scrollHeight,
-            behavior: 'smooth'
-          });
-        }
+      if (billItemsContainerRef.current) {
+        billItemsContainerRef.current.scrollTo({
+          top: billItemsContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
       }
-
-      // Clear highlight after animation
       setTimeout(() => {
         setLastUpdatedItemId(null);
       }, 2000);
     }, 100);
 
-    setSearchQuery('');
-    setShowProductDropdown(false);
-
-    // Set flag to prevent dropdown from reopening
-    preventDropdownReopenRef.current = true;
-
-    // Auto-focus back to search input after adding product
-    // In barcode scan mode, refocus immediately for continuous scanning
-    const focusDelay = barcodeScanMode ? 10 : 100;
+    // Reset the form for the next entry and refocus the name field
+    setNewItemForm(getDefaultNewItemForm());
     setTimeout(() => {
-      if (searchInputRef.current) {
-        searchInputRef.current.focus({ preventScroll: true });
-      }
-      // Reset the flag after a short delay
-      setTimeout(() => {
-        preventDropdownReopenRef.current = false;
-      }, barcodeScanMode ? 100 : 200);
-    }, focusDelay);
+      itemNameInputRef.current?.focus();
+    }, 100);
   };
 
   // Helper function to highlight and scroll to updated item
@@ -1052,14 +749,6 @@ const POSBillingSystem = () => {
     if (!item) return;
 
     const newQty = parseFloat((item.qty + change).toFixed(3));
-
-    if (enforceStockValidation && newQty > item.stock) {
-      toast.warning(t('sales.pos.insufficientStock', { stock: item.stock, product: item.name }), {
-        duration: 3000,
-        icon: '⚠️'
-      });
-      return;
-    }
 
     updateActiveTab({
       billItems: activeTab.billItems.map(item =>
@@ -1299,20 +988,16 @@ const POSBillingSystem = () => {
     //   errors.push(t('sales.pos.validation.selectCustomer'));
     // }
 
-    // Validate each item
-    // Validate each item
+    // Validate each item (manual free-text entry - just needs a name, positive qty and non-negative price)
     activeTab.billItems.forEach((item, index) => {
-      if (!item.id) {
-        errors.push(t('sales.pos.validation.missingProductId', { index: index + 1 }));
+      if (!item.name || !item.name.trim()) {
+        errors.push(t('sales.pos.validation.itemNameRequired', { index: index + 1 }));
       }
       if (!item.qty || item.qty <= 0) {
         errors.push(t('sales.pos.validation.invalidQty', { index: index + 1 }));
       }
       if (item.price === undefined || item.price === null || item.price < 0) {
         errors.push(t('sales.pos.validation.invalidPrice', { index: index + 1 }));
-      }
-      if (enforceStockValidation && item.qty > item.stock) {
-        errors.push(t('sales.pos.validation.stockExceeded', { index: index + 1, qty: item.qty, stock: item.stock }));
       }
     });
 
@@ -1410,22 +1095,20 @@ const POSBillingSystem = () => {
         store: 'Main Store' // Can be made dynamic from settings if needed
       },
 
-      // === ORDER ITEMS (Complete table fields) ===
+      // === ORDER ITEMS (free-text line items, no product master) ===
       items: activeTab.billItems.map((item, index) => {
         const itemTaxAmounts = calculateItemTaxAmounts(item);
         return {
-          // Basic product information
+          // Basic item information (manually entered, not linked to a product record)
           serialNumber: index + 1,
-          productId: item.id,
           productName: item.name,
-          productCode: item.code,
+          productCode: item.code || '',
           category: item.category || '',
           unit: item.unit || 'Piece',
           hsnCode: item.hsnCode || '',
 
           // Pricing and quantity
           quantity: item.qty,
-          wastage_qty: item.wastage || 0,
           unitPrice: item.price,
           mrp: item.mrp || 0,
 
@@ -1446,13 +1129,7 @@ const POSBillingSystem = () => {
           // Calculated amounts
           grossAmount: item.price * item.qty, // Before discount
           netAmount: calculateItemTotal(item), // After discount, tax handling based on settings
-          finalAmount: calculateItemTotal(item) + itemTaxAmounts.taxAmount, // Final amount including tax
-
-          // Stock information
-          availableStock: item.stock,
-
-          // Product image
-          // productImage: item.image || null
+          finalAmount: calculateItemTotal(item) + itemTaxAmounts.taxAmount // Final amount including tax
         };
       }),
 
@@ -2011,12 +1688,12 @@ const POSBillingSystem = () => {
         return;
       }
 
-      // Ctrl + P = Focus product search (works from anywhere)
+      // Ctrl + P = Focus the manual item name input (works from anywhere)
       if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-          searchInputRef.current.select();
+        if (itemNameInputRef.current) {
+          itemNameInputRef.current.focus();
+          itemNameInputRef.current.select();
         }
         return;
       }
@@ -2027,14 +1704,6 @@ const POSBillingSystem = () => {
         setShowCustomerModal(true);
         return;
       }
-
-      // Ctrl + B = Toggle Barcode Scanner Mode
-      if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'b' || e.key === 'B')) {
-        e.preventDefault();
-        setBarcodeScanMode(prev => !prev);
-        return;
-      }
-
 
       // Ctrl + D = Focus discount input
       if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'd' || e.key === 'D')) {
@@ -2056,10 +1725,13 @@ const POSBillingSystem = () => {
         return;
       }
 
-      // F2 = Open Add Product modal
+      // F2 = Focus the manual item name input to add a new line item
       if (e.key === 'F2') {
         e.preventDefault();
-        setShowProductModal(true);
+        if (itemNameInputRef.current) {
+          itemNameInputRef.current.focus();
+          itemNameInputRef.current.select();
+        }
         return;
       }
 
@@ -2077,36 +1749,11 @@ const POSBillingSystem = () => {
         return;
       }
 
-      // Handle arrow keys and Enter when dropdown is open and search input is focused
-      if (showProductDropdown && filteredProducts.length > 0 && e.target === searchInputRef.current) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setSelectedProductIndex(prev =>
-            prev < filteredProducts.length - 1 ? prev + 1 : prev
-          );
-          return;
-        }
-
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setSelectedProductIndex(prev => prev > 0 ? prev - 1 : 0);
-          return;
-        }
-
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const selectedProduct = filteredProducts[selectedProductIndex];
-          if (selectedProduct) {
-            addItemToBill(selectedProduct);
-          }
-          return;
-        }
-
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          setShowProductDropdown(false);
-          return;
-        }
+      // Enter while focused on the manual item name input adds the item to the bill
+      if (e.key === 'Enter' && e.target === itemNameInputRef.current) {
+        e.preventDefault();
+        addManualItemToBill();
+        return;
       }
 
       // Tab navigation for split payment fields
@@ -2195,23 +1842,7 @@ const POSBillingSystem = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [grandTotal, activeTabId, showProductDropdown, filteredProducts, selectedProductIndex, activeTab.paymentType]);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      // Close dropdown only if click is outside both search input AND dropdown
-      if (
-        searchInputRef.current &&
-        !searchInputRef.current.contains(e.target) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target)
-      ) {
-        setShowProductDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [grandTotal, activeTabId, activeTab.paymentType]);
 
   const bgClass = 'bg-gray-50';
   const cardBg = 'bg-white';
@@ -2482,269 +2113,139 @@ const POSBillingSystem = () => {
           <div className="flex-1 flex gap-2 overflow-hidden px-2 py-1">
             {/* Left Section - Bill Items */}
             <div className="flex-1 flex flex-col overflow-hidden relative">
-              {/* Product Search */}
-              <div className="relative pb-1">
-                <div className="relative flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-4 top-3 text-gray-400" size={20} />
+              {/* Manual Item Entry - free-text line item form (no product catalog) */}
+              <div className={`relative pb-1 ${cardBg} border ${borderColor} rounded-lg p-2 mb-1`}>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex-1 min-w-[160px]">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.manualItem.name')} *
+                    </label>
                     <input
-                      ref={searchInputRef}
+                      ref={itemNameInputRef}
                       type="text"
-                      placeholder={t('sales.pos.search.placeholder')}
-                      className={`w-full pl-12 pr-16 py-2 border-2 ${barcodeScanMode
-                        ? 'border-green-500 bg-green-50'
-                        : borderColor + ' ' + cardBg
-                        } focus:outline-none focus:ring-2 ${barcodeScanMode
-                          ? 'focus:ring-green-500 focus:border-green-500'
-                          : 'focus:ring-blue-500 focus:border-blue-500'
-                        }`}
-                      value={searchQuery}
-                      onChange={(e) => {
-                        const inputValue = e.target.value;
-                        setSearchQuery(inputValue);
-                        setShowProductDropdown(true);
-
-                        // Auto-detect barcode scan: if input matches a product barcode exactly, add it automatically
-                        if (inputValue && inputValue.trim().length > 0) {
-                          const matchedProduct = products.find(p =>
-                            p.barcode && p.barcode.toLowerCase() === inputValue.toLowerCase().trim()
-                          );
-
-                          if (matchedProduct) {
-                            // Product found by exact barcode match - add it automatically
-                            setBarcodeDetected(true);
-                            setTimeout(() => {
-                              addItemToBill(matchedProduct);
-                              // Reset barcode detection indicator after a short delay
-                              setTimeout(() => {
-                                setBarcodeDetected(false);
-                              }, 1000);
-                            }, 50);
-                          }
-                        }
-                      }}
-                      onFocus={() => {
-                        // Don't reopen dropdown if we just added a product
-                        if (!preventDropdownReopenRef.current) {
-                          setShowProductDropdown(true);
-                        }
-                      }}
-                      onClick={() => {
-                        // User explicitly clicked, so allow dropdown to open
-                        preventDropdownReopenRef.current = false;
-                        setShowProductDropdown(true);
-                      }}
+                      placeholder={t('sales.pos.manualItem.namePlaceholder')}
+                      className={`w-full px-3 py-2 border-2 ${borderColor} ${cardBg} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded text-sm`}
+                      value={newItemForm.name}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, name: e.target.value }))}
                     />
-                    {barcodeDetected && (
-                      <span className="absolute right-3 top-3 text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-medium animate-pulse">
-                        ✓ {t('sales.pos.search.barcodeDetected')}
-                      </span>
-                    )}
-                    {!barcodeDetected && !barcodeScanMode && (
-                      <span className="absolute right-3 top-3 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium">
-                        Ctrl+P
-                      </span>
-                    )}
-                    {!barcodeDetected && barcodeScanMode && (
-                      <span className="absolute right-3 top-3 text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-medium">
-                        📱 {t('sales.pos.search.scanMode')}
-                      </span>
-                    )}
                   </div>
 
-                  {/* Barcode Scanner Mode Toggle Button */}
+                  <div className="w-20">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.table.qty')}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      className="w-full px-2 py-2 border-2 border-gray-200 rounded text-sm text-right"
+                      value={newItemForm.qty}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, qty: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="w-24">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.manualItem.unitPrice')}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full px-2 py-2 border-2 border-gray-200 rounded text-sm text-right"
+                      value={newItemForm.price}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, price: e.target.value }))}
+                    />
+                  </div>
+
                   <button
-                    onClick={() => setBarcodeScanMode(!barcodeScanMode)}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 whitespace-nowrap shadow-sm ${barcodeScanMode
-                      ? 'bg-green-600 text-white hover:bg-green-700 ring-2 ring-green-400'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
-                      }`}
-                    title={barcodeScanMode ? t('sales.pos.search.disableScanMode') : t('sales.pos.search.enableScanMode')}
+                    onClick={addManualItemToBill}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-1 whitespace-nowrap shadow-sm"
+                    title={t('sales.pos.manualItem.addItem')}
                   >
-                    <span className="text-lg">📱</span>
-                    <span className="hidden sm:inline">{barcodeScanMode ? t('sales.pos.search.scanning') : t('sales.pos.search.scanner')}</span>
-                    <kbd className={`text-xs px-1.5 py-0.5 rounded ${barcodeScanMode ? 'bg-green-700' : 'bg-gray-200'
-                      }`}>Ctrl+B</kbd>
+                    <Plus size={16} />
+                    {t('sales.pos.manualItem.addItem')}
+                    <kbd className="ml-1 text-[10px] bg-green-700 px-1.5 py-0.5 rounded">F2</kbd>
                   </button>
                 </div>
 
-                {/* Category List Bar */}
-                <div className="flex items-center gap-2 mt-2 py-1 overflow-x-auto no-scrollbar border-b border-gray-100 mb-1 pb-2">
-                  <button
-                    onClick={() => setSelectedCategoryId('all')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shadow-sm ${selectedCategoryId === 'all'
-                      ? 'bg-blue-600 text-white border border-blue-600'
-                      : 'bg-white text-gray-700 border border-gray-200 hover:border-blue-400'
-                      }`}
-                  >
-                    All Categories
-                  </button>
-                  {categories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategoryId(cat.id)}
-                      className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shadow-sm ${selectedCategoryId === cat.id
-                        ? 'bg-blue-600 text-white border border-blue-600'
-                        : 'bg-white text-gray-700 border border-gray-200 hover:border-blue-400'
-                        }`}
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
+                {/* Optional secondary fields */}
+                <div className="flex flex-wrap items-end gap-2 mt-2">
+                  <div className="w-28">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.table.hsn')}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
+                      value={newItemForm.hsnCode}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, hsnCode: e.target.value }))}
+                    />
+                  </div>
+                  <div className="w-32">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.manualItem.category')}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
+                      value={newItemForm.category}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, category: e.target.value }))}
+                    />
+                  </div>
+                  <div className="w-24">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.table.unit')}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Piece"
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
+                      value={newItemForm.unit}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, unit: e.target.value }))}
+                    />
+                  </div>
+                  <div className="w-20">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.table.mrp')}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-right"
+                      value={newItemForm.mrp}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, mrp: e.target.value }))}
+                    />
+                  </div>
+                  <div className="w-20">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.manualItem.taxRate')}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-right"
+                      value={newItemForm.tax}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, tax: e.target.value }))}
+                    />
+                  </div>
+                  <div className="w-20">
+                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
+                      {t('sales.pos.table.disc')}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-right"
+                      value={newItemForm.discount}
+                      onChange={(e) => setNewItemForm(prev => ({ ...prev, discount: e.target.value }))}
+                    />
+                  </div>
                 </div>
-
-                {/* Product Dropdown - Shows on focus or when typing */}
-                {showProductDropdown && (
-                  <div
-                    ref={dropdownRef}
-                    className={`absolute top-full left-0 right-0 mt-2 ${cardBg}  shadow-xl border ${borderColor} max-h-100 overflow-y-auto overflow-x-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200`}
-                    style={{
-                      animation: 'slideDown 0.2s ease-out'
-                    }}
-                  >
-                    {productsLoading ? (
-                      <div className="p-4 text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                        <p className={`${textSecondary} mt-2 text-sm`}>{t('sales.pos.search.loading')}</p>
-                      </div>
-                    ) : products.length === 0 ? (
-                      /* No products in database at all */
-                      <div className="p-8 text-center">
-                        <div className="text-6xl mb-3">📦</div>
-                        <p className="text-lg font-semibold text-gray-700 mb-2">{t('sales.pos.search.noProducts')}</p>
-                        <p className={`${textSecondary} text-sm mb-4`}>
-                          {t('sales.pos.search.getStarted')}
-                        </p>
-                        <button
-                          onClick={() => {
-                            setShowProductDropdown(false);
-                            setShowProductModal(true);
-                          }}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                          title={t('sales.pos.search.addFirstProduct')}
-                        >
-                          <Plus size={18} />
-                          {t('sales.pos.search.addFirstProduct')}
-                          <kbd className="ml-2 text-xs bg-green-700 px-2 py-1 rounded">F2</kbd>
-                        </button>
-                      </div>
-                    ) : filteredProducts.length > 0 ? (
-                      /* Products found */
-                      <>
-                        {/* Search hint */}
-                        {!searchQuery && (
-                          <div className="px-2 py-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 sticky top-0 z-30 bg-blue-50 border-b border-blue-200">
-                            <p className="text-xs text-blue-700 flex-1 min-w-0 truncate">
-                              💡 <strong>{t('sales.pos.search.searchBy')}</strong> {t('sales.pos.search.placeholder')}
-                            </p>
-                            <p className="text-xs text-gray-500 flex items-center gap-1 shrink-0 flex-wrap">
-                              <span><kbd className="px-1 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Ctrl+P</kbd> Search</span>
-                              <span className="text-gray-300">•</span>
-                              <span><kbd className="px-1 py-0.5 bg-white border border-gray-300 rounded text-[10px]">↑↓</kbd> Navigate</span>
-                              <span className="text-gray-300">•</span>
-                              <span><kbd className="px-1 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Enter</kbd> Select</span>
-                            </p>
-                          </div>
-                        )}
-
-                        {/* {!searchQuery && (
-                  <div className="px-4 py-2 bg-gray-100 border-b border-gray-300 flex justify-between items-center">
-                    <p className="text-xs font-semibold text-gray-600">Recent Products (Top 20)</p>
-                   
-                  </div>
-                )} */}
-                        {filteredProducts.map((product, index) => (
-                          <div
-                            key={product.id}
-                            ref={index === selectedProductIndex ? selectedProductRef : null}
-                            className={`p-4 cursor-pointer border-b ${borderColor} last:border-b-0 transition-all duration-150 ease-in-out ${index === selectedProductIndex
-                              ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-l-blue-600 shadow-sm '
-                              : 'hover:bg-gray-50 hover:shadow-sm active:scale-[0.99]'
-                              }`}
-                            onClick={() => addItemToBill(product)}
-                            onMouseEnter={() => setSelectedProductIndex(index)}
-                          >
-                            <div className="flex items-center gap-3">
-                              {/* Left: Product Image */}
-                              <div className="flex-shrink-0">
-                                {product.image ? (
-                                  <img
-                                    src={product.image}
-                                    alt={product.name}
-                                    className={`w-14 h-14 object-cover rounded-lg border-2 transition-all duration-150 ${index === selectedProductIndex ? 'border-blue-500 shadow-md scale-105' : 'border-gray-200'}`}
-                                    onError={(e) => {
-                                      e.target.style.display = 'none';
-                                      e.target.nextSibling.style.display = 'flex';
-                                    }}
-                                  />
-                                ) : null}
-                                <div className={`w-14 h-14 rounded-lg border-2 flex items-center justify-center text-2xl transition-all duration-150 ${product.image ? 'hidden' : 'flex'} ${index === selectedProductIndex ? 'border-blue-500 bg-blue-50 scale-105' : 'border-gray-200 bg-gray-50'}`}>
-                                  📦
-                                </div>
-                              </div>
-
-                              {/* Middle: Product Details */}
-                              <div className="flex-1 min-w-0">
-                                <div className={`font-semibold text-base transition-colors duration-150 truncate ${index === selectedProductIndex ? 'text-blue-900' : 'text-gray-900'}`}>
-                                  {product.name}
-                                </div>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
-                                    {product.category}
-                                  </span>
-                                  <span className="bg-gray-200 px-2 py-0.5 rounded text-xs font-medium text-gray-700">
-                                    {product.code}
-                                  </span>
-                                  {product.hsnCode && (
-                                    <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium">
-                                      HSN: {product.hsnCode}
-                                    </span>
-                                  )}
-                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${product.stock < 15 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                                    Stock: {product.stock}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Right: Price */}
-                              <div className="text-right flex-shrink-0">
-                                <div className={`font-bold text-xl transition-all duration-150 ${index === selectedProductIndex ? 'text-green-700 scale-105' : 'text-green-600'}`}>
-                                  ₹{product.price.toLocaleString()}
-                                </div>
-                                {product.mrp > product.price && (
-                                  <div className={`text-xs ${textSecondary} line-through mt-0.5`}>
-                                    MRP: ₹{product.mrp.toLocaleString()}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    ) : (
-                      /* Search returned no results */
-                      <div className="p-8 text-center">
-                        <div className="text-4xl mb-3">🔍</div>
-                        <p className="text-base font-semibold text-gray-700 mb-1">{t('sales.pos.search.noResults')}</p>
-                        <p className={`${textSecondary} text-sm mb-4`}>
-                          {searchQuery ? `${t('sales.pos.search.noResults')} "${searchQuery}"` : t('sales.pos.search.trySearching')}
-                        </p>
-                        <button
-                          onClick={() => {
-                            setShowProductDropdown(false);
-                            setShowProductModal(true);
-                          }}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                          title={t('sales.pos.search.addNewProduct')}
-                        >
-                          <Plus size={16} />
-                          {t('sales.pos.search.addNewProduct')}
-                          <kbd className="ml-2 text-xs bg-green-700 px-2 py-1 rounded">F2</kbd>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
               {/* Bill Items */}
               <div className={`${cardBg}  shadow-sm border ${borderColor} p-2 flex-1 flex flex-col overflow-hidden relative`}>
@@ -2753,53 +2254,15 @@ const POSBillingSystem = () => {
                   <h3 className="text-xs font-semibold text-gray-700 flex items-center gap-1 shrink-0">
                     <span>📋</span>{t('sales.pos.billItems.title')} ({activeTab.billItems.length})
                   </h3>
-                  <button
-                    onClick={() => setShowProductModal(true)}
-                    className="flex items-center gap-1 px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-[10px] font-medium shrink-0"
-                    title={t('sales.pos.billItems.addProduct')}
-                  >
-                    <Plus size={11} />
-                    <span>{t('sales.pos.billItems.addProduct')}</span>
-                    <kbd className="ml-1 text-[9px] bg-green-700 px-1 py-0.5 rounded">F2</kbd>
-                  </button>
 
                   <div className="flex-1" />
 
-                  {/* Stock Check */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[10px] font-medium text-gray-700 whitespace-nowrap">{t('sales.pos.billItems.stockCheck')}</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={enforceStockValidation}
-                      title={enforceStockValidation ? t('sales.pos.billItems.stockCheckOn') : t('sales.pos.billItems.stockCheckOff')}
-                      onClick={() => setEnforceStockValidation(prev => !prev)}
-                      className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${enforceStockValidation ? 'bg-green-600' : 'bg-gray-300'}`}
-                    >
-                      <span className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${enforceStockValidation ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-
-                  {/* Divider */}
-                  <span className="h-4 w-px bg-gray-300 shrink-0" />
-
-                  {/* Price Level */}
+                  {/* Price Level - a label only; manually entered prices are used as typed */}
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="text-[10px] font-medium text-gray-700">Price:</span>
                     <select
                       value={activeTab.priceLevel || 'Retail'}
-                      onChange={(e) => {
-                        const newLevel = e.target.value;
-                        const updatedItems = activeTab.billItems.map(item => {
-                          let newPrice = item.price;
-                          if (newLevel === 'Retail') newPrice = item.originalPrice || item.price;
-                          else if (newLevel === 'Wholesale') newPrice = item.wholesalePrice || 0;
-                          else if (newLevel === 'Dealer') newPrice = item.dealerPrice || 0;
-                          if (newPrice === 0 && item.originalPrice > 0) newPrice = item.originalPrice;
-                          return { ...item, price: newPrice, priceLevel: newLevel };
-                        });
-                        updateActiveTab({ priceLevel: newLevel, billItems: updatedItems });
-                      }}
+                      onChange={(e) => updateActiveTab({ priceLevel: e.target.value })}
                       className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:border-blue-500"
                     >
                       <option value="Retail">Retail</option>
@@ -2925,12 +2388,43 @@ const POSBillingSystem = () => {
                           >
                             <td className="border border-gray-300 px-1 py-1.5 text-sm text-center">{index + 1}</td>
                             <td className="border border-gray-300 px-2 py-1.5">
-                              <div className="min-w-0">
-                                <div className="font-medium text-sm truncate">{item.name}</div>
-                                <div className={`text-xs ${textSecondary} truncate`}>{item.category}</div>
+                              <div className="min-w-0 flex flex-col gap-0.5">
+                                <input
+                                  type="text"
+                                  value={item.name}
+                                  onChange={(e) => updateActiveTab({
+                                    billItems: activeTab.billItems.map(i =>
+                                      i.id === item.id ? { ...i, name: e.target.value } : i
+                                    )
+                                  })}
+                                  className="w-full px-1 py-0.5 text-sm font-medium border border-transparent hover:border-gray-300 focus:border-gray-300 rounded"
+                                  placeholder={t('sales.pos.manualItem.namePlaceholder')}
+                                />
+                                <input
+                                  type="text"
+                                  value={item.category || ''}
+                                  onChange={(e) => updateActiveTab({
+                                    billItems: activeTab.billItems.map(i =>
+                                      i.id === item.id ? { ...i, category: e.target.value } : i
+                                    )
+                                  })}
+                                  className={`w-full px-1 py-0.5 text-xs ${textSecondary} border border-transparent hover:border-gray-300 focus:border-gray-300 rounded`}
+                                  placeholder={t('sales.pos.manualItem.category')}
+                                />
                               </div>
                             </td>
-                            <td className="border border-gray-300 px-1 py-1.5 text-sm text-center">{item.hsnCode || '-'}</td>
+                            <td className="border border-gray-300 px-1 py-1.5">
+                              <input
+                                type="text"
+                                value={item.hsnCode || ''}
+                                onChange={(e) => updateActiveTab({
+                                  billItems: activeTab.billItems.map(i =>
+                                    i.id === item.id ? { ...i, hsnCode: e.target.value } : i
+                                  )
+                                })}
+                                className="w-full px-1 py-0.5 text-center text-sm border border-gray-300 rounded"
+                              />
+                            </td>
                             <td className="border border-gray-300 px-1 py-1.5">
                               <div className="flex items-center justify-center gap-0.5">
                                 <button
@@ -2944,13 +2438,6 @@ const POSBillingSystem = () => {
                                   value={item.qty}
                                   onChange={(e) => {
                                     const newQty = parseFloat(e.target.value) || 0;
-                                    if (enforceStockValidation && newQty > item.stock) {
-                                      toast.warning(t('sales.pos.insufficientStock', { stock: item.stock, product: item.name }), {
-                                        duration: 3000,
-                                        icon: '⚠️'
-                                      });
-                                      return;
-                                    }
                                     updateActiveTab({
                                       billItems: activeTab.billItems.map(i =>
                                         i.id === item.id ? { ...i, qty: Math.max(0, newQty) } : i
@@ -2959,7 +2446,6 @@ const POSBillingSystem = () => {
                                     highlightAndScrollToItem(item.id);
                                   }}
                                   className="w-12 flex-1 min-w-[40px] px-1 py-0.5 text-center text-sm border border-gray-300 rounded"
-                                  {...(enforceStockValidation ? { max: item.stock } : {})}
                                   step="0.001"
                                 />
                                 <button
@@ -2970,15 +2456,39 @@ const POSBillingSystem = () => {
                                 </button>
                               </div>
                             </td>
-                            <td className="border border-gray-300 px-1 py-1.5 text-center text-sm">{item.unit || '-'}</td>
-                            <td className="border border-gray-300 px-1 py-1.5 text-right text-sm">₹{Number(item.mrp || 0).toFixed(2)}</td>
+                            <td className="border border-gray-300 px-1 py-1.5">
+                              <input
+                                type="text"
+                                value={item.unit || ''}
+                                onChange={(e) => updateActiveTab({
+                                  billItems: activeTab.billItems.map(i =>
+                                    i.id === item.id ? { ...i, unit: e.target.value } : i
+                                  )
+                                })}
+                                className="w-full px-1 py-0.5 text-center text-sm border border-gray-300 rounded"
+                              />
+                            </td>
+                            <td className="border border-gray-300 px-1 py-1.5">
+                              <input
+                                type="number"
+                                value={item.mrp || 0}
+                                onChange={(e) => updateActiveTab({
+                                  billItems: activeTab.billItems.map(i =>
+                                    i.id === item.id ? { ...i, mrp: Number(e.target.value) || 0 } : i
+                                  )
+                                })}
+                                className="w-full px-1 py-0.5 text-right text-sm border border-gray-300 rounded"
+                                min="0"
+                                step="0.01"
+                              />
+                            </td>
                             <td className="border border-gray-300 px-1 py-1.5">
                               <input
                                 type="number"
                                 value={item.price}
                                 onChange={(e) => updateActiveTab({
                                   billItems: activeTab.billItems.map(i =>
-                                    i.id === item.id ? { ...i, price: Number(e.target.value) || 0, priceLevel: 'Custom' } : i
+                                    i.id === item.id ? { ...i, price: Number(e.target.value) || 0 } : i
                                   )
                                 })}
                                 className="w-full px-1 py-0.5 text-right text-sm border border-gray-300 rounded"
@@ -3007,9 +2517,21 @@ const POSBillingSystem = () => {
                             </td>
                             {taxSettings.enableTax && (
                               <td className="border border-gray-300 px-1 py-1.5 text-right text-sm">
-                                <div className="flex flex-col">
-                                  <span>₹{calculateItemTaxAmounts(item).taxAmount.toFixed(2)}</span>
-                                  <span className="text-[10px] text-gray-500">({calculateItemTaxAmounts(item).taxPercentage.toFixed(1)}%)</span>
+                                <div className="flex flex-col items-end gap-0.5">
+                                  <input
+                                    type="number"
+                                    value={item.tax || 0}
+                                    onChange={(e) => updateActiveTab({
+                                      billItems: activeTab.billItems.map(i =>
+                                        i.id === item.id ? { ...i, tax: Number(e.target.value) || 0 } : i
+                                      )
+                                    })}
+                                    className="w-14 px-1 py-0.5 text-right text-xs border border-gray-300 rounded"
+                                    min="0"
+                                    step="0.01"
+                                    title={t('sales.pos.manualItem.taxRate')}
+                                  />
+                                  <span className="text-[10px] text-gray-500">₹{calculateItemTaxAmounts(item).taxAmount.toFixed(2)}</span>
                                 </div>
                               </td>
                             )}
@@ -4212,18 +3734,6 @@ const POSBillingSystem = () => {
             await fetchCustomers();
             // Close the customer selection modal
             setShowCustomerModal(false);
-          }}
-        />
-
-        {/* Product Add Modal */}
-        <ProductAddEditForm
-          editMode={false}
-          productModal={showProductModal}
-          setProductModal={setShowProductModal}
-          product={null}
-          fetchData={() => {
-            // Refresh products list after adding new product
-            fetchActiveProducts();
           }}
         />
 

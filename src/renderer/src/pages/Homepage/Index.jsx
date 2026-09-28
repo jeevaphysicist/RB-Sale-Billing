@@ -2,20 +2,8 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  ShoppingCart,
-  ShoppingBag,
-  Package,
   Users,
   Truck,
-  Banknote,
-  FileBarChart,
-  Settings,
-  PlusCircle,
-  CreditCard,
-  Barcode,
-  Soup,
-  PcCase,
-  HandCoins,
   ShoppingBasket
 } from 'lucide-react'
 
@@ -34,15 +22,6 @@ const Index = () => {
       description: t('homepage.createSalesInvoice')
     },
     {
-      id: 'products',
-      label: t('nav.products'),
-      icon: PcCase,
-      path: '/products',
-      color: 'bg-orange-100 text-orange-700',
-      hoverColor: 'hover:bg-orange-200',
-      description: t('homepage.manageInventory')
-    },
-    {
       id: 'customers',
       label: t('nav.customers'),
       icon: Users,
@@ -52,43 +31,6 @@ const Index = () => {
       description: t('homepage.viewManageCustomers')
     },
     {
-      id: 'reports',
-      label: t('nav.reports'),
-      icon: FileBarChart,
-      path: '/reports',
-      color: 'bg-teal-100 text-teal-700',
-      hoverColor: 'hover:bg-teal-200',
-      description: t('homepage.viewAnalytics')
-    },
-      {
-      id: 'expenses',
-      label: t('nav.expenses'),
-      icon: Banknote,
-      path: '/expense-management',
-      color: 'bg-red-100 text-red-700',
-      hoverColor: 'hover:bg-red-200',
-      description: t('homepage.trackExpenses')
-    },
-    {
-      id: 'barcode',
-      label: t('products.barcode'),
-      icon: Barcode,
-      path: '/barcode-generator',
-      color: 'bg-pink-100 text-pink-700',
-      hoverColor: 'hover:bg-pink-200',
-      description: t('homepage.generateBarcodes')
-    },
-    
-    {
-      id: 'new-purchase',
-      label: t('common.newPurchase'),
-      icon: ShoppingBag,
-      path: '/purchases/new',
-      color: 'bg-blue-100 text-blue-700',
-      hoverColor: 'hover:bg-blue-200',
-      description: t('homepage.recordPurchase')
-    }, 
-    {
       id: 'suppliers',
       label: t('nav.suppliers'),
       icon: Truck,
@@ -97,9 +39,6 @@ const Index = () => {
       hoverColor: 'hover:bg-indigo-200',
       description: t('homepage.manageSupplierDetails')
     },
-  
-    
-    
   ]
 
   return (

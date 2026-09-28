@@ -103,27 +103,7 @@ export function registerTemplateHandlers() {
   // Generate Preview (No DB Save)
   ipcMain.handle('template:generate-preview', async (event, { data, templateName, config }) => {
     try {
-      const { generateSalesOrderPDF, generatePurchaseOrderPDF, generateGSTInvoicePDF, generateNonGSTInvoicePDF } = await import('../utils/pdfGenerator.js');
-      
-      // Check if this is a barcode label roll template
-      if (templateName === 'LabelRoll') {
-        console.log('🎯 Generating barcode labels for template:', templateName);
-        const { generateThermalLabelPDF } = await import('../utils/pdf/barcodeLabelPDF.js');
-        
-        // Settings page sends data as a sales order mock, we need to extract items
-        const products = (data.items || []).map(item => ({
-          product_name: item.product_name || item.productName || 'Demo Product',
-          product_code: item.product_code || item.productCode || 'DEMO001',
-          barcode: item.barcode || item.productCode || '12345678',
-          selling_price: item.unit_price || item.unitPrice || 0,
-          labelQuantity: 1
-        }));
-
-        const pdfResult = await generateThermalLabelPDF(products, config);
-        const pdfBuffer = pdfResult.buffer || pdfResult;
-        console.log('✅ Barcode PDF generated successfully, buffer size:', pdfBuffer?.length);
-        return { success: true, data: pdfBuffer, dimensions: pdfResult.dimensions };
-      }
+      const { generateSalesOrderPDF, generateGSTInvoicePDF, generateNonGSTInvoicePDF } = await import('../utils/pdfGenerator.js');
 
       // Check if this is an A4 GST or Non-GST invoice template
       if (templateName === 'A4-GST' || templateName === 'A4-NonGST') {
@@ -146,21 +126,8 @@ export function registerTemplateHandlers() {
       }
       
       // Pass the temporary config to the generator
-      // We merge it into the data object or pass as a separate arg. 
-      // Let's pass it as a separate arg to generateSalesOrderPDF.
-      // Note: We need to update pdfGenerator.js to accept this config.
-      
-      let pdfBuffer;
-      // Infer document type from data or check templateSettings in DB if not provided
-      // For now, let's assume if it has 'po_number' it's a PO
-      if (data.po_number || (data.documentType === 'purchase_order')) {
-          const pdfResult = await generatePurchaseOrderPDF(data, templateName, config);
-          pdfBuffer = pdfResult.buffer || pdfResult;
-      } else {
-        // Default to Sales Order
-          const pdfResult = await generateSalesOrderPDF(data, templateName, config);
-          pdfBuffer = pdfResult.buffer || pdfResult;
-      }
+      const pdfResult = await generateSalesOrderPDF(data, templateName, config);
+      const pdfBuffer = pdfResult.buffer || pdfResult;
       return { success: true, data: pdfBuffer };
     } catch (error) {
       console.error('Error generating preview:', error);

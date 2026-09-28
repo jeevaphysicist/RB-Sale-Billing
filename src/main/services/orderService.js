@@ -1,4 +1,3 @@
-import { logStockMovement } from '../ipcHandlers/stockMovementHandlers.js';
 import { addTransaction } from '../ipcHandlers/ledgerHandlers.js';
 
 // Helper to generate next order number
@@ -44,35 +43,6 @@ const resolveCustomerId = (customer) => {
   const id = customer?.id;
   if (id == null || id === '' || Number(id) <= 0) return null;
   return Number(id);
-};
-
-const productExists = (db, productId) =>
-  new Promise((resolve, reject) => {
-    if (productId == null || Number(productId) <= 0) {
-      resolve(false);
-      return;
-    }
-    db.get('SELECT id FROM products WHERE id = ?', [productId], (err, row) => {
-      if (err) reject(err);
-      else resolve(!!row);
-    });
-  });
-
-/** Deduct sold qty from stock; floor at 0 (no block on oversell, no negative stock stored) */
-export const deductProductStock = async (db, productId, quantity) => {
-  const deductQty = parseFloat(quantity) || 0;
-  if (deductQty <= 0) return;
-
-  await new Promise((resolve, reject) => {
-    db.run(
-      `UPDATE products SET current_stock = MAX(0, current_stock - ?) WHERE id = ?`,
-      [deductQty, productId],
-      (err) => {
-        if (err) reject(err);
-        else resolve();
-      }
-    );
-  });
 };
 
 export const createSalesOrder = async (db, orderData) => {
@@ -137,18 +107,12 @@ export const createSalesOrder = async (db, orderData) => {
           );
         });
 
-    // 2. Insert into sales_order_items and collect stock deductions (aggregated per product)
-    const stockDeductions = new Map();
-
+    // 2. Insert into sales_order_items (free-text line items, no product master)
     for (const item of items) {
-      const hasValidProduct = await productExists(db, item.productId);
-      const safeProductId = hasValidProduct ? item.productId : null;
-      const deductQty = (parseFloat(item.quantity) || 0) + (parseFloat(item.wastage_qty) || 0);
-
       await new Promise((resolve, reject) => {
         const itemParams = [
-          orderId, safeProductId, item.productName, item.productCode, item.hsnCode, item.category, item.unit,
-          item.quantity, item.wastage_qty || 0, item.unitPrice, item.mrp,
+          orderId, item.productName, item.productCode, item.hsnCode, item.category, item.unit,
+          item.quantity, item.unitPrice, item.mrp,
           item.itemDiscount, item.itemDiscountAmount,
           item.taxRate, item.sgstAmount, item.cgstAmount, item.igstAmount, item.totalTaxAmount,
           item.grossAmount, item.netAmount, item.finalAmount
@@ -156,46 +120,18 @@ export const createSalesOrder = async (db, orderData) => {
 
         db.run(
           `INSERT INTO sales_order_items (
-            order_id, product_id, product_name, product_code, hsn_code, category, unit,
-            quantity, wastage_qty, unit_price, mrp,
+            order_id, product_name, product_code, hsn_code, category, unit,
+            quantity, unit_price, mrp,
             discount_percent, discount_amount,
             tax_rate, sgst_amount, cgst_amount, igst_amount, tax_amount,
             gross_amount, net_amount, final_amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           sanitizeParams(itemParams),
           (err) => {
             if (err) reject(err);
             else resolve();
           }
         );
-      });
-
-      if (!hasValidProduct) {
-        console.warn(`⚠️ Skipping stock update for missing product id: ${item.productId} (${item.productName})`);
-        continue;
-      }
-
-      const existing = stockDeductions.get(safeProductId) || {
-        productId: safeProductId,
-        qty: 0,
-        productName: item.productName
-      };
-      existing.qty += deductQty;
-      stockDeductions.set(safeProductId, existing);
-    }
-
-    for (const { productId, qty, productName } of stockDeductions.values()) {
-      await deductProductStock(db, productId, qty);
-
-      await logStockMovement(db, {
-        productId,
-        referenceType: 'sales_order',
-        referenceId: orderId,
-        referenceNumber: nextOrderNumber,
-        transactionType: 'OUT',
-        quantity: qty,
-        reason: 'Sales Order Created',
-        createdBy: 'System'
       });
     }
 

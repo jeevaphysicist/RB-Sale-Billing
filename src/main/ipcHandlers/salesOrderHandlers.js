@@ -1,8 +1,7 @@
 import { ipcMain } from 'electron';
-import { logStockMovement } from './stockMovementHandlers.js';
 
 import { addTransaction } from './ledgerHandlers.js';
-import { createSalesOrder, getNextOrderNumber, deductProductStock } from '../services/orderService.js';
+import { createSalesOrder, getNextOrderNumber } from '../services/orderService.js';
 
 let globalDb = null;
 
@@ -278,47 +277,7 @@ export function initializeSalesOrderHandlers(db) {
         }
         const orderNumber = order.order_number;
 
-        // 1. Get existing items to calculate stock adjustments (Restore Stock)
-        const oldItems = await new Promise((resolve, reject) => {
-          globalDb.all(
-            `SELECT product_id, quantity, wastage_qty FROM sales_order_items WHERE order_id = ?`,
-            [id],
-            (err, rows) => {
-              if (err) reject(err);
-              else resolve(rows || []);
-            }
-          );
-        });
-
-        // 2. Restore stock from old items (reverse the original deduction)
-        for (const oldItem of oldItems) {
-          if (oldItem.product_id) {
-            await new Promise((resolve, reject) => {
-              globalDb.run(
-                `UPDATE products SET current_stock = current_stock + ? WHERE id = ?`,
-                [oldItem.quantity + (oldItem.wastage_qty || 0), oldItem.product_id],
-                (err) => {
-                  if (err) reject(err);
-                  else resolve();
-                }
-              );
-            });
-
-            // Log stock movement (Restoration)
-            await logStockMovement(globalDb, {
-              productId: oldItem.product_id,
-              referenceType: 'sales_order',
-              referenceId: id,
-              referenceNumber: orderNumber,
-              transactionType: 'IN',
-              quantity: oldItem.quantity + (oldItem.wastage_qty || 0),
-              reason: 'Sales Order Edit (Restoration)',
-              createdBy: 'System'
-            });
-          }
-        }
-
-        // 3. Delete old items
+        // 1. Delete old items
         await new Promise((resolve, reject) => {
           globalDb.run(
             `DELETE FROM sales_order_items WHERE order_id = ?`,
@@ -330,14 +289,12 @@ export function initializeSalesOrderHandlers(db) {
           );
         });
 
-        // 4. Insert new items and deduct stock (aggregated per product, never below 0)
-        const stockDeductions = new Map();
-
+        // 2. Insert new items (free-text line items, no product master)
         for (const item of items) {
           await new Promise((resolve, reject) => {
             const itemParams = [
-              id, item.productId, item.productName, item.productCode, item.hsnCode, item.category, item.unit,
-              item.quantity, item.wastage_qty || 0, item.unitPrice, item.mrp,
+              id, item.productName, item.productCode, item.hsnCode, item.category, item.unit,
+              item.quantity, item.unitPrice, item.mrp,
               item.itemDiscount, item.itemDiscountAmount,
               item.taxRate, item.sgstAmount, item.cgstAmount, item.igstAmount, item.totalTaxAmount,
               item.grossAmount, item.netAmount, item.finalAmount
@@ -345,44 +302,18 @@ export function initializeSalesOrderHandlers(db) {
 
             globalDb.run(
               `INSERT INTO sales_order_items (
-                order_id, product_id, product_name, product_code, hsn_code, category, unit,
-                quantity, wastage_qty, unit_price, mrp,
+                order_id, product_name, product_code, hsn_code, category, unit,
+                quantity, unit_price, mrp,
                 discount_percent, discount_amount,
                 tax_rate, sgst_amount, cgst_amount, igst_amount, tax_amount,
                 gross_amount, net_amount, final_amount
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               sanitizeParams(itemParams),
               (err) => {
                 if (err) reject(err);
                 else resolve();
               }
             );
-          });
-
-          if (item.productId) {
-            const deductQty = (parseFloat(item.quantity) || 0) + (parseFloat(item.wastage_qty) || 0);
-            const existing = stockDeductions.get(item.productId) || {
-              productId: item.productId,
-              qty: 0,
-              productName: item.productName
-            };
-            existing.qty += deductQty;
-            stockDeductions.set(item.productId, existing);
-          }
-        }
-
-        for (const { productId, qty, productName } of stockDeductions.values()) {
-          await deductProductStock(globalDb, productId, qty);
-
-          await logStockMovement(globalDb, {
-            productId,
-            referenceType: 'sales_order',
-            referenceId: id,
-            referenceNumber: orderNumber,
-            transactionType: 'OUT',
-            quantity: qty,
-            reason: 'Sales Order Edit (Updated)',
-            createdBy: 'System'
           });
         }
 
@@ -586,46 +517,6 @@ export function initializeSalesOrderHandlers(db) {
           return { success: false, message: 'Order is already cancelled' };
         }
 
-        // Get items to restore stock
-        const items = await new Promise((resolve, reject) => {
-          globalDb.all(
-            `SELECT product_id, quantity, wastage_qty FROM sales_order_items WHERE order_id = ?`,
-            [orderId],
-            (err, rows) => {
-              if (err) reject(err);
-              else resolve(rows || []);
-            }
-          );
-        });
-
-        // Restore stock
-        for (const item of items) {
-          if (item.product_id) {
-            await new Promise((resolve, reject) => {
-              globalDb.run(
-                `UPDATE products SET current_stock = current_stock + ? WHERE id = ?`,
-                [item.quantity + (item.wastage_qty || 0), item.product_id],
-                (err) => {
-                  if (err) reject(err);
-                  else resolve();
-                }
-              );
-            });
-
-            // Log stock movement
-            await logStockMovement(globalDb, {
-              productId: item.product_id,
-              referenceType: 'sales_order',
-              referenceId: orderId,
-              referenceNumber: order.order_number,
-              transactionType: 'IN',
-              quantity: item.quantity + (item.wastage_qty || 0),
-              reason: 'Sales Order Cancelled',
-              createdBy: 'System'
-            });
-          }
-        }
-
         // REVERSE LEDGER TRANSACTIONS
         // A. Restore Loyalty Points
         if ((order.loyalty_points_used || 0) > 0 && order.customer_id) {
@@ -744,46 +635,6 @@ export function initializeSalesOrderHandlers(db) {
           return { success: false, message: 'Cannot return a draft order. Use delete instead.' };
         }
 
-        // Get items to restore stock
-        const items = await new Promise((resolve, reject) => {
-          globalDb.all(
-            `SELECT product_id, quantity, wastage_qty FROM sales_order_items WHERE order_id = ?`,
-            [orderId],
-            (err, rows) => {
-              if (err) reject(err);
-              else resolve(rows || []);
-            }
-          );
-        });
-
-        // Restore stock
-        for (const item of items) {
-          if (item.product_id) {
-            await new Promise((resolve, reject) => {
-              globalDb.run(
-                `UPDATE products SET current_stock = current_stock + ? WHERE id = ?`,
-                [item.quantity + (item.wastage_qty || 0), item.product_id],
-                (err) => {
-                  if (err) reject(err);
-                  else resolve();
-                }
-              );
-            });
-
-            // Log stock movement
-            await logStockMovement(globalDb, {
-              productId: item.product_id,
-              referenceType: 'sales_order',
-              referenceId: orderId,
-              referenceNumber: order.order_number,
-              transactionType: 'IN',
-              quantity: item.quantity + (item.wastage_qty || 0),
-              reason: 'Sales Order Returned',
-              createdBy: 'System'
-            });
-          }
-        }
-
         // REVERSE LEDGER TRANSACTIONS
         // A. Restore Loyalty Points
         if ((order.loyalty_points_used || 0) > 0 && order.customer_id) {
@@ -885,46 +736,6 @@ export function initializeSalesOrderHandlers(db) {
         if (!order) {
           await new Promise((resolve) => globalDb.run('ROLLBACK', () => resolve()));
           return { success: false, message: 'Sales order not found' };
-        }
-
-        // Get order items to restore stock
-        const items = await new Promise((resolve, reject) => {
-          globalDb.all(
-            `SELECT product_id, quantity, wastage_qty FROM sales_order_items WHERE order_id = ?`,
-            [orderId],
-            (err, rows) => {
-              if (err) reject(err);
-              else resolve(rows || []);
-            }
-          );
-        });
-
-        // Restore stock
-        for (const item of items) {
-          if (item.product_id) {
-            await new Promise((resolve, reject) => {
-              globalDb.run(
-                `UPDATE products SET current_stock = current_stock + ? WHERE id = ?`,
-                [item.quantity + (item.wastage_qty || 0), item.product_id],
-                (err) => {
-                  if (err) reject(err);
-                  else resolve();
-                }
-              );
-            });
-
-            // Log stock movement
-            await logStockMovement(globalDb, {
-              productId: item.product_id,
-              referenceType: 'sales_order',
-              referenceId: orderId,
-              referenceNumber: order.order_number,
-              transactionType: 'IN',
-              quantity: item.quantity + (item.wastage_qty || 0),
-              reason: 'Sales Order Deleted',
-              createdBy: 'System'
-            });
-          }
         }
 
         // REVERSE LEDGER TRANSACTIONS
@@ -1233,7 +1044,6 @@ export function initializeSalesOrderHandlers(db) {
             fassai_no: storeSettings?.fassai_no || ''
           },
           items: items.map(item => ({
-            productId: item.product_id,
             productName: item.product_name,
             productCode: item.product_code,
             hsnCode: item.hsn_code,

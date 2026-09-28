@@ -1,5 +1,5 @@
 const templateService = {
-  // Get template settings for a document type (sales_order, purchase_order)
+  // Get template settings for a document type (sales_order)
   getSettings: async (documentType) => {
     try {
       return await window.api.invoke('template:get-settings', documentType);

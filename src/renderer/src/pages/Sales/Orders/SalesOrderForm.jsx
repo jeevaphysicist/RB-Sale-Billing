@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, Trash2, User, CreditCard, ShoppingBag, Plus, Save, ChevronLeft, Calendar, FileText, Truck, PenTool } from 'lucide-react';
-import { productService } from '../../../services/productService';
+import { ShoppingCart, Trash2, User, CreditCard, ShoppingBag, Plus, Save, ChevronLeft, Calendar, FileText, Truck, PenTool } from 'lucide-react';
 import { customerService } from '../../../services/customerService';
 import { salesOrderService } from '../../../services/salesOrderService';
 import { toast } from 'sonner';
@@ -38,17 +37,27 @@ const SalesOrderForm = () => {
     });
 
 
+    // Manual Item Entry State
+    const [itemForm, setItemForm] = useState({
+        name: '',
+        code: '',
+        hsnCode: '',
+        category: '',
+        unit: 'Piece',
+        qty: 1,
+        price: 0,
+        mrp: 0,
+        taxRate: 0
+    });
+
     // Search States
-    const [searchQuery, setSearchQuery] = useState('');
-    const [products, setProducts] = useState([]);
-    const [filteredProducts, setFilteredProducts] = useState([]);
-    const [showProductDropdown, setShowProductDropdown] = useState(false);
     const [customers, setCustomers] = useState([]);
     const [filteredCustomers, setFilteredCustomers] = useState([]);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [customerSearchQuery, setCustomerSearchQuery] = useState('');
 
-    const searchInputRef = useRef(null);
+    const itemNameInputRef = useRef(null);
+    const nextItemId = useRef(1);
 
     // Initialize Loading
     useEffect(() => {
@@ -65,29 +74,12 @@ const SalesOrderForm = () => {
                 }
             }
 
-            // Load products and customers
-            fetchProducts();
+            // Load customers
             fetchCustomers();
         };
 
         initialize();
     }, [id]);
-
-    const fetchProducts = async () => {
-        try {
-            const response = await productService.getProducts({ limit: 1000, status: 'active' });
-            if (response.success) {
-                setProducts(response.data.map(p => ({
-                    ...p,
-                    price: parseFloat(p.selling_price || 0),
-                    stock: parseFloat(p.current_stock || 0),
-                    unit: p.unit || 'Piece'
-                })));
-            }
-        } catch (error) {
-            console.error('Error fetching products', error);
-        }
-    };
 
     const fetchCustomers = async () => {
         try {
@@ -99,22 +91,6 @@ const SalesOrderForm = () => {
             console.error('Error fetching customers', error);
         }
     };
-
-    // Product Search
-    useEffect(() => {
-        if (!searchQuery) {
-            setFilteredProducts([]);
-            return;
-        }
-        const query = searchQuery.toLowerCase();
-        const filtered = products.filter(p =>
-            (p.product_name && p.product_name.toLowerCase().includes(query)) ||
-            (p.product_code && p.product_code.toLowerCase().includes(query)) ||
-            (p.barcode && p.barcode.toLowerCase().includes(query))
-        ).slice(0, 10);
-        setFilteredProducts(filtered);
-        setShowProductDropdown(true);
-    }, [searchQuery, products]);
 
     // Customer Search
     useEffect(() => {
@@ -129,54 +105,58 @@ const SalesOrderForm = () => {
     }, [customerSearchQuery, customers]);
 
 
-    const handleAddItem = (product) => {
-        const existingItem = billItems.find(item => item.id === product.id);
-        if (existingItem) {
-            const newQty = existingItem.qty + 1;
-            if (newQty > product.stock) {
-                toast.warning(`Insufficient Stock — Only ${product.stock} units available for "${product.product_name}".`);
-                return;
-            }
-            setBillItems(billItems.map(item =>
-                item.id === product.id ? { ...item, qty: newQty } : item
-            ));
-        } else {
-            if (product.stock < 1) {
-                toast.warning(`Insufficient Stock — Product "${product.product_name}" is out of stock.`);
-                return;
-            }
-            setBillItems([...billItems, {
-                id: product.id,
-                name: product.product_name,
-                code: product.product_code,
-                price: product.price,
-                mrp: product.mrp,
-                qty: 1,
-                stock: product.stock, // Store stock for validation
-                unit: product.unit,
-                tax: product.tax_rate,
-                discount: 0,
-                hsnCode: product.hsn_code
-            }]);
+    const handleItemFormChange = (field, value) => {
+        setItemForm(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleAddItem = () => {
+        const name = itemForm.name.trim();
+        if (!name) {
+            toast.error("Please enter an item name");
+            itemNameInputRef.current?.focus();
+            return;
         }
-        setSearchQuery('');
-        setShowProductDropdown(false);
-        searchInputRef.current?.focus();
+        const qty = parseFloat(itemForm.qty);
+        if (!qty || qty <= 0) {
+            toast.error("Quantity must be greater than 0");
+            return;
+        }
+        const price = parseFloat(itemForm.price) || 0;
+
+        setBillItems([...billItems, {
+            id: `manual-${nextItemId.current++}`,
+            name,
+            code: itemForm.code.trim(),
+            price,
+            mrp: parseFloat(itemForm.mrp) || 0,
+            qty,
+            unit: itemForm.unit || 'Piece',
+            tax: parseFloat(itemForm.taxRate) || 0,
+            discount: 0,
+            hsnCode: itemForm.hsnCode.trim(),
+            category: itemForm.category.trim()
+        }]);
+
+        setItemForm({
+            name: '',
+            code: '',
+            hsnCode: '',
+            category: '',
+            unit: 'Piece',
+            qty: 1,
+            price: 0,
+            mrp: 0,
+            taxRate: 0
+        });
+        itemNameInputRef.current?.focus();
     };
 
     const updateItemQty = (id, newQty) => {
         const item = billItems.find(i => i.id === id);
         if (!item) return;
 
-        // Strict Enforcement: Clamp to stock and a reasonable hard limit (1,000,000)
-        const stockLimit = item.stock || 0;
-        const maxLimit = Math.min(stockLimit, 1000000);
-
-        let validQty = newQty;
-        if (newQty > maxLimit) {
-            toast.warning(`Quantity limited to available stock (${stockLimit})`);
-            validQty = maxLimit;
-        }
+        // Enforce a reasonable hard limit (1,000,000)
+        const validQty = Math.min(newQty, 1000000);
 
         setBillItems(billItems.map(i => i.id === id ? { ...i, qty: Math.max(1, validQty) } : i));
     };
@@ -344,14 +324,12 @@ const SalesOrderForm = () => {
                 const discountAmount = (grossAmount * (item.discount || 0)) / 100;
 
                 return {
-                    productId: item.id,
                     productName: item.name,
                     productCode: item.code || '',
                     hsnCode: item.hsnCode || '',
                     category: item.category || '',
                     unit: item.unit,
                     quantity: item.qty,
-                    wastage_qty: 0,
                     unitPrice: item.price,
                     mrp: item.mrp || item.price,
                     itemDiscount: item.discount || 0,
@@ -577,48 +555,113 @@ const SalesOrderForm = () => {
                         </div>
                     </div>
 
-                    {/* Product Entry & Table */}
+                    {/* Item Entry & Table */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 min-h-[400px] flex flex-col">
-                        {/* Search Bar */}
-                        <div className="p-4 border-b border-gray-200">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                                <input
-                                    ref={searchInputRef}
-                                    type="text"
-                                    placeholder="Scan Barcode or Search Product..."
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-lg"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
-                                {showProductDropdown && filteredProducts.length > 0 && (
-                                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
-                                        <table className="w-full text-left">
-                                            <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0">
-                                                <tr>
-                                                    <th className="px-4 py-2">Product Name</th>
-                                                    <th className="px-4 py-2">Code</th>
-                                                    <th className="px-4 py-2 text-right">Stock</th>
-                                                    <th className="px-4 py-2 text-right">Price</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {filteredProducts.map((product, idx) => (
-                                                    <tr
-                                                        key={product.id}
-                                                        className={`hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                                                        onClick={() => handleAddItem(product)}
-                                                    >
-                                                        <td className="px-4 py-3 font-medium text-gray-800">{product.product_name}</td>
-                                                        <td className="px-4 py-3 text-sm text-gray-500">{product.product_code}</td>
-                                                        <td className={`px-4 py-3 text-sm text-right font-medium ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>{product.stock}</td>
-                                                        <td className="px-4 py-3 text-sm text-right font-bold text-blue-600">₹{product.price}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
+                        {/* Add Item Form */}
+                        <div className="p-4 border-b border-gray-200 bg-gray-50/50">
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3 items-end">
+                                <div className="col-span-2 lg:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Item Name *</label>
+                                    <input
+                                        ref={itemNameInputRef}
+                                        type="text"
+                                        placeholder="Enter item name"
+                                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                                        value={itemForm.name}
+                                        onChange={(e) => handleItemFormChange('name', e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); } }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Code</label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.code}
+                                        onChange={(e) => handleItemFormChange('code', e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">HSN Code</label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.hsnCode}
+                                        onChange={(e) => handleItemFormChange('hsnCode', e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.category}
+                                        onChange={(e) => handleItemFormChange('category', e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Unit</label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.unit}
+                                        onChange={(e) => handleItemFormChange('unit', e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Qty</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.qty}
+                                        onChange={(e) => handleItemFormChange('qty', e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Price</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.price}
+                                        onChange={(e) => handleItemFormChange('price', e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <button
+                                        onClick={handleAddItem}
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg flex items-center justify-center font-semibold text-sm transition-colors"
+                                    >
+                                        <Plus size={16} className="mr-1" /> Add
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end mt-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">MRP</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.mrp}
+                                        onChange={(e) => handleItemFormChange('mrp', e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Tax Rate %</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className="w-full p-2 border border-gray-300 rounded-lg outline-none text-sm"
+                                        value={itemForm.taxRate}
+                                        onChange={(e) => handleItemFormChange('taxRate', e.target.value)}
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -628,7 +671,7 @@ const SalesOrderForm = () => {
                                 <thead className="bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wider sticky top-0">
                                     <tr>
                                         <th className="px-4 py-3 w-12 text-center text-xs font-semibold uppercase tracking-wider">#</th>
-                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Product Description</th>
+                                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Item Description</th>
                                         <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider w-20">HSN</th>
                                         <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider w-24">Unit</th>
                                         <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider w-24">Qty</th>
@@ -644,7 +687,7 @@ const SalesOrderForm = () => {
                                         <tr>
                                             <td colSpan="9" className="px-4 py-12 text-center text-gray-400">
                                                 <ShoppingBag size={48} className="mx-auto mb-3 opacity-20" />
-                                                <p>No items added yet. Search or scan to add products.</p>
+                                                <p>No items added yet. Use the form above to add an item.</p>
                                             </td>
                                         </tr>
                                     ) : (
@@ -668,7 +711,6 @@ const SalesOrderForm = () => {
                                                         <input
                                                             type="number"
                                                             min="1"
-                                                            max={item.stock}
                                                             className="w-16 p-1 border border-gray-300 rounded text-center focus:border-blue-500 outline-none text-sm"
                                                             value={item.qty}
                                                             onChange={(e) => {

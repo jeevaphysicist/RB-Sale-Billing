@@ -31,20 +31,6 @@ const api = {
     return () => ipcRenderer.removeListener('window-unfullscreen', callback)
   },
 
-  // Category Management
-  createCategory: (categoryData) => ipcRenderer.invoke('category:create', categoryData),
-  getCategories: (filterParams) => ipcRenderer.invoke('category:get-all', filterParams),
-  getCategoryById: (categoryId) => ipcRenderer.invoke('category:get-by-id', categoryId),
-  updateCategory: (categoryData) => ipcRenderer.invoke('category:update', categoryData),
-  deleteCategory: (categoryId) => ipcRenderer.invoke('category:delete', categoryId),
-
-  // Brand Management
-  createBrand: (brandData) => ipcRenderer.invoke('brand:create', brandData),
-  getBrands: (filterParams) => ipcRenderer.invoke('brand:get-all', filterParams),
-  getBrandById: (brandId) => ipcRenderer.invoke('brand:get-by-id', brandId),
-  updateBrand: (brandData) => ipcRenderer.invoke('brand:update', brandData),
-  deleteBrand: (brandId) => ipcRenderer.invoke('brand:delete', brandId),
-
   // Supplier Management
   getSuppliers: (filters) => ipcRenderer.invoke('supplier:get-all', filters),
   getSupplierById: (id) => ipcRenderer.invoke('supplier:get-by-id', id),
@@ -61,46 +47,17 @@ const api = {
   deleteCustomer: (customerId) => ipcRenderer.invoke('customer:delete', customerId),
   importCustomers: (customers) => ipcRenderer.invoke('customer:import', customers),
 
-  // Product Management
-  createProduct: (productData) => ipcRenderer.invoke('product:create', productData),
-  getProducts: (filterParams) => ipcRenderer.invoke('product:get-all', filterParams),
-  getProductById: (productId) => ipcRenderer.invoke('product:get-by-id', productId),
-  updateProduct: (productData) => ipcRenderer.invoke('product:update', productData),
-  deleteProduct: (productId) => ipcRenderer.invoke('product:delete', productId),
-  importProducts: (products) => ipcRenderer.invoke('product:import', products),
-  exportProductPriceSheetPdf: (payload) => ipcRenderer.invoke('product:export-price-sheet-pdf', payload),
-
   // File Management
-  uploadProductImage: (imageData) => ipcRenderer.invoke('file:upload-product-image', imageData),
-  getProductImages: (productId) => ipcRenderer.invoke('file:get-product-images', productId),
-  deleteProductImage: (imageId) => ipcRenderer.invoke('file:delete-product-image', imageId),
-  getImagePath: (imageId) => ipcRenderer.invoke('file:get-image-path', imageId),
   uploadProfileImage: (imageData) => ipcRenderer.invoke('file:upload-profile-image', imageData),
   getProfileImage: (userId) => ipcRenderer.invoke('file:get-profile-image', userId),
-
-  // Expense Management
-  createExpense: (expenseData) => ipcRenderer.invoke('expense:create', expenseData),
-  getExpenses: (filterParams) => ipcRenderer.invoke('expense:get-all', filterParams),
-  getExpenseById: (expenseId) => ipcRenderer.invoke('expense:get-by-id', expenseId),
-  updateExpense: (expenseData) => ipcRenderer.invoke('expense:update', expenseData),
-  deleteExpense: (expenseId) => ipcRenderer.invoke('expense:delete', expenseId),
-
-  // Purchase Order Management
-  createPurchaseOrder: (orderData) => ipcRenderer.invoke('purchase-order:create', orderData),
-  getPurchaseOrders: (filterParams) => ipcRenderer.invoke('purchase-order:get-all', filterParams),
-  getPurchaseOrderById: (poId) => ipcRenderer.invoke('purchase-order:get-by-id', poId),
-  updatePurchaseOrder: (orderData) => ipcRenderer.invoke('purchase-order:update', orderData),
-  deletePurchaseOrder: (poId) => ipcRenderer.invoke('purchase-order:delete', poId),
-  getNextPONumber: () => ipcRenderer.invoke('purchase-order:get-next-number'),
 
   // Payment Record Management
   createPaymentRecord: (paymentData) => ipcRenderer.invoke('payment-record:create', paymentData),
   getPaymentRecords: (filterParams) => ipcRenderer.invoke('payment-record:get-all', filterParams),
   getPaymentRecordById: (paymentId) => ipcRenderer.invoke('payment-record:get-by-id', paymentId),
-  getPaymentRecordsByPO: (poId) => ipcRenderer.invoke('payment-record:get-by-po', poId),
+  getPaymentRecordsByPO: (params) => ipcRenderer.invoke('payment-record:get-by-po', params),
   updatePaymentRecord: (paymentData) => ipcRenderer.invoke('payment-record:update', paymentData),
   deletePaymentRecord: (paymentId) => ipcRenderer.invoke('payment-record:delete', paymentId),
-  getPOSummary: (filterParams) => ipcRenderer.invoke('payment-record:get-po-summary', filterParams),
 
   // Sales Order Management
   // Sales Order Management
@@ -146,79 +103,6 @@ const api = {
   setAppPassword: (password) => ipcRenderer.invoke('app-password:set', password),
   verifyAppPassword: (password) => ipcRenderer.invoke('app-password:verify', password),
   removeAppPassword: () => ipcRenderer.invoke('app-password:remove'),
-
-  // Sales Report
-  getSalesSummary: (filters) => ipcRenderer.invoke('sales-report:get-summary', filters),
-  getDailySales: (filters) => ipcRenderer.invoke('sales-report:get-daily-sales', filters),
-  getTopProducts: (filters) => ipcRenderer.invoke('sales-report:get-top-products', filters),
-  getCategoryBreakdown: (filters) => ipcRenderer.invoke('sales-report:get-category-breakdown', filters),
-  getPaymentBreakdown: (filters) => ipcRenderer.invoke('sales-report:get-payment-breakdown', filters),
-  getDetailedSales: (filters) => ipcRenderer.invoke('sales-report:get-detailed-sales', filters),
-
-  // Purchase Report
-  getPurchaseSummary: (filters) => ipcRenderer.invoke('purchase-report:get-summary', filters),
-  getDailyPurchases: (filters) => ipcRenderer.invoke('purchase-report:get-daily-purchases', filters),
-  getPurchaseTopProducts: (filters) => ipcRenderer.invoke('purchase-report:get-top-products', filters),
-  getPurchaseCategoryBreakdown: (filters) => ipcRenderer.invoke('purchase-report:get-category-breakdown', filters),
-  getPurchasePaymentBreakdown: (filters) => ipcRenderer.invoke('purchase-report:get-payment-breakdown', filters),
-  getDetailedPurchases: (filters) => ipcRenderer.invoke('purchase-report:get-detailed-purchases', filters),
-
-  // Profit & Loss Report
-  getProfitLossSummary: (filters) => ipcRenderer.invoke('profit-loss-report:get-summary', filters),
-  getProfitLossDaily: (filters) => ipcRenderer.invoke('profit-loss-report:get-daily', filters),
-
-  // Stock Report
-  getStockSummary: (filters) => ipcRenderer.invoke('stock-report:get-summary', filters),
-  getStockCategoryBreakdown: (filters) => ipcRenderer.invoke('stock-report:get-category-breakdown', filters),
-  getStockList: (filters) => ipcRenderer.invoke('stock-report:get-stock-list', filters),
-
-  // Customer Report
-  getCustomerSummary: (filters) => ipcRenderer.invoke('customer-report:get-summary', filters),
-  getTopCustomers: (limit) => ipcRenderer.invoke('customer-report:get-top-customers', limit),
-  getCustomerList: (filters) => ipcRenderer.invoke('customer-report:get-customer-list', filters),
-  
-  // Customer Insights Enhancements
-  getCustomerGrowthTrends: (filters) => ipcRenderer.invoke('customer-report:get-growth-trends', filters),
-  getAtRiskCustomers: (filters) => ipcRenderer.invoke('customer-report:get-at-risk-customers', filters),
-  getCustomerSegments: (filters) => ipcRenderer.invoke('customer-report:get-customer-segments', filters),
-  getPaymentBehavior: (filters) => ipcRenderer.invoke('customer-report:get-payment-behavior', filters),
-  getAOVMetrics: (filters) => ipcRenderer.invoke('customer-report:get-aov-metrics', filters),
-
-  // Supplier Report
-  getSupplierSummary: (filters) => ipcRenderer.invoke('supplier-report:get-summary', filters),
-  getTopSuppliers: (limit) => ipcRenderer.invoke('supplier-report:get-top-suppliers', limit),
-  getSupplierReportList: (filters) => ipcRenderer.invoke('supplier-report:get-supplier-list', filters),
-
-  // Supplier Insights Enhancements
-  getSupplierGrowthTrends: (filters) => ipcRenderer.invoke('supplier-report:get-growth-trends', filters),
-  getSupplierSegments: (filters) => ipcRenderer.invoke('supplier-report:get-supplier-segments', filters),
-  getPurchaseTrends: (filters) => ipcRenderer.invoke('supplier-report:get-purchase-trends', filters),
-  getSupplierPaymentBehavior: (filters) => ipcRenderer.invoke('supplier-report:get-payment-behavior', filters),
-  getAPVMetrics: (filters) => ipcRenderer.invoke('supplier-report:get-apv-metrics', filters),
-  
-  // Payment Report
-  getPaymentSummary: (filters) => ipcRenderer.invoke('payment-report:get-summary', filters),
-  getPaymentChartData: (filters) => ipcRenderer.invoke('payment-report:get-chart-data', filters),
-  getPaymentTransactions: (filters) => ipcRenderer.invoke('payment-report:get-transactions', filters),
-
-  // Expense Report
-  getExpenseReportSummary: (filters) => ipcRenderer.invoke('expense-report:get-summary', filters),
-  getExpenseCategoryBreakdown: (filters) => ipcRenderer.invoke('expense-report:get-category-breakdown', filters),
-  getExpenseTrend: (filters) => ipcRenderer.invoke('expense-report:get-trend', filters),
-  getExpenseReportList: (filters) => ipcRenderer.invoke('expense-report:get-list', filters),
-
-  // Product Performance Report
-  getProductPerformanceSummary: (filters) => ipcRenderer.invoke('product-performance:get-summary', filters),
-  getTopSellingProducts: (filters) => ipcRenderer.invoke('product-performance:get-top-products', filters),
-  getProductPerformanceList: (filters) => ipcRenderer.invoke('product-performance:get-list', filters),
-
-  // Daily Summary Report
-  getDailySummary: (date) => ipcRenderer.invoke('daily-report:get-summary', date),
-  getDailyHourlyTrend: (date) => ipcRenderer.invoke('daily-report:get-hourly-trend', date),
-
-  // Wastage Report
-  getWastageReportSummary: (filters) => ipcRenderer.invoke('wastage-report:get-summary', filters),
-  getWastageReportDetailed: (filters) => ipcRenderer.invoke('wastage-report:get-detailed', filters),
 
   // Application info
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

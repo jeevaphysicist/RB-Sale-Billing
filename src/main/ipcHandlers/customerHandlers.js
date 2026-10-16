@@ -88,7 +88,8 @@ export function initializeCustomerHandlers(db) {
         ifsc_code,
         upi_id,
         notes,
-        loyalty_points
+        loyalty_points,
+        vehicle_number
       } = customerData;
 
       // Validation
@@ -110,14 +111,14 @@ export function initializeCustomerHandlers(db) {
             customer_type, customer_status, gstin, pan_number, business_name, billing_type, price_category,
             address_line_1, address_line_2, city, state, pincode, country, shipping_address,
             opening_balance, balance_type, credit_limit, payment_terms, payment_method, price_level,
-            bank_name, account_number, ifsc_code, upi_id, notes, loyalty_points
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            bank_name, account_number, ifsc_code, upi_id, notes, loyalty_points, vehicle_number
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             customer_name, finalCustomerCode || '', contact_person || '', mobile_number || '', alternate_number || '', email || '',
             customer_type || 'Individual', customer_status || 'Active', gstin || '', pan_number || '', business_name || '', billing_type || 'B2C', price_category || 'Retail',
             address_line_1 || '', address_line_2 || '', city || '', state || '', pincode || '', country || 'India', shipping_address || '',
             opening_balance || 0, balance_type || 'Debit', credit_limit || 0, payment_terms || 'Immediate', payment_method || 'Cash', price_level || 'Standard',
-            bank_name || '', account_number || '', ifsc_code || '', upi_id || '', notes || '', loyalty_points || 0
+            bank_name || '', account_number || '', ifsc_code || '', upi_id || '', notes || '', loyalty_points || 0, vehicle_number || ''
           ],
           function(err) {
             if (err) {
@@ -178,10 +179,10 @@ export function initializeCustomerHandlers(db) {
       
       // Add search filter
       if (searchTerm) {
-        conditions.push(`(customer_name LIKE ? OR customer_code LIKE ? OR contact_person LIKE ? OR mobile_number LIKE ? OR email LIKE ? OR city LIKE ?)`);
+        conditions.push(`(customer_name LIKE ? OR customer_code LIKE ? OR contact_person LIKE ? OR mobile_number LIKE ? OR email LIKE ? OR city LIKE ? OR vehicle_number LIKE ?)`);
         const searchParam = `%${searchTerm}%`;
-        params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
-        countParams.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+        params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+        countParams.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
       }
       
       // Apply conditions
@@ -299,7 +300,8 @@ export function initializeCustomerHandlers(db) {
         ifsc_code,
         upi_id,
         notes,
-        loyalty_points
+        loyalty_points,
+        vehicle_number
       } = customerData;
 
       if (!id) {
@@ -319,7 +321,7 @@ export function initializeCustomerHandlers(db) {
             customer_type = ?, customer_status = ?, gstin = ?, pan_number = ?, business_name = ?, billing_type = ?, price_category = ?,
             address_line_1 = ?, address_line_2 = ?, city = ?, state = ?, pincode = ?, country = ?, shipping_address = ?,
             opening_balance = ?, balance_type = ?, credit_limit = ?, payment_terms = ?, payment_method = ?, price_level = ?,
-            bank_name = ?, account_number = ?, ifsc_code = ?, upi_id = ?, notes = ?, loyalty_points = ?,
+            bank_name = ?, account_number = ?, ifsc_code = ?, upi_id = ?, notes = ?, loyalty_points = ?, vehicle_number = ?,
             updated_at = datetime('now', '+5 hours', '30 minutes')
           WHERE id = ?`,
           [
@@ -327,7 +329,7 @@ export function initializeCustomerHandlers(db) {
             customer_type, customer_status, gstin, pan_number, business_name, billing_type, price_category,
             address_line_1, address_line_2, city, state, pincode, country, shipping_address,
             opening_balance || 0, balance_type, credit_limit || 0, payment_terms, payment_method, price_level,
-            bank_name, account_number, ifsc_code, upi_id, notes, loyalty_points || 0,
+            bank_name, account_number, ifsc_code, upi_id, notes, loyalty_points || 0, vehicle_number || '',
             id
           ],
           (err) => {

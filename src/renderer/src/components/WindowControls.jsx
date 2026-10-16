@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Minimize2, Square, X,Truck, UserPlus,PcCase,ChartColumnBig, LayoutDashboard, ShoppingCart, ShoppingBag, Package, FolderTree, Tag, FileText, Settings } from 'lucide-react'
+import { Minimize2, Square, X, UserPlus, ChartColumnBig, LayoutDashboard, ShoppingCart, Package, FolderTree, Tag, FileText, Settings } from 'lucide-react'
 import LanguageSwitcher from './LanguageSwitcher'
 import FontSizeControls from './FontSizeControls'
 import icon from '../assets/icon.png'
@@ -45,10 +45,7 @@ const WindowControls = ({ title = 'Application', showIcon = true, showTitle = tr
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { name: 'Sales', icon: ShoppingCart, path: '/sales' },
-    { name: 'Purchase', icon: ShoppingBag, path: '/purchases' },
-    { name: 'Products', icon: PcCase, path: '/products' },
     { name: 'Customers', icon: UserPlus, path: '/customers' },
-    { name: 'Vendors', icon: Truck, path: '/suppliers' },
     { name: 'Reports', icon: ChartColumnBig, path: '/reports' },
     { name: 'Settings', icon: Settings, path: '/settings' }
   ]

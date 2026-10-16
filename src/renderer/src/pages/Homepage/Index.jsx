@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Users,
-  Truck,
   ShoppingBasket
 } from 'lucide-react'
 
@@ -29,16 +28,7 @@ const Index = () => {
       color: 'bg-purple-100 text-purple-700',
       hoverColor: 'hover:bg-purple-200',
       description: t('homepage.viewManageCustomers')
-    },
-    {
-      id: 'suppliers',
-      label: t('nav.suppliers'),
-      icon: Truck,
-      path: '/suppliers',
-      color: 'bg-indigo-100 text-indigo-700',
-      hoverColor: 'hover:bg-indigo-200',
-      description: t('homepage.manageSupplierDetails')
-    },
+    }
   ]
 
   return (

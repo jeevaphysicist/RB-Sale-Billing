@@ -1042,6 +1042,8 @@
     "enterState": "Enter state",
     "enterPincode": "Enter pincode",
     "enterGSTNumber": "Enter GST number",
+    "vehicleNumber": "Vehicle Number",
+    "enterVehicleNumber": "Enter vehicle number",
     "enterOpeningBalance": "Enter opening balance",
     "enterCreditLimit": "Enter credit limit",
     "manageDescription": "Manage your customers. Create, edit, or delete customer records as needed.",

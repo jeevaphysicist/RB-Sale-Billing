@@ -115,7 +115,8 @@ export const createSalesOrder = async (db, orderData) => {
           item.quantity, item.unitPrice, item.mrp,
           item.itemDiscount, item.itemDiscountAmount,
           item.taxRate, item.sgstAmount, item.cgstAmount, item.igstAmount, item.totalTaxAmount,
-          item.grossAmount, item.netAmount, item.finalAmount
+          item.grossAmount, item.netAmount, item.finalAmount,
+          item.labourCharge || 0
         ];
 
         db.run(
@@ -124,8 +125,9 @@ export const createSalesOrder = async (db, orderData) => {
             quantity, unit_price, mrp,
             discount_percent, discount_amount,
             tax_rate, sgst_amount, cgst_amount, igst_amount, tax_amount,
-            gross_amount, net_amount, final_amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            gross_amount, net_amount, final_amount,
+            labour_charge
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           sanitizeParams(itemParams),
           (err) => {
             if (err) reject(err);

@@ -7,11 +7,9 @@ import {
   Plus,
   Loader2,
   CheckCircle2,
-  XCircle,
   Clock,
   AlertCircle,
   Printer,
-  RotateCcw,
   X
 } from 'lucide-react';
 import DataTable from '../../../components/DataTable';
@@ -30,16 +28,6 @@ const Index = () => {
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [deleteModal, setDeleteModal] = useState({
-    isOpen: false,
-    order: null,
-    loading: false
-  });
-  const [cancelModal, setCancelModal] = useState({
-    isOpen: false,
-    order: null,
-    loading: false
-  });
-  const [returnModal, setReturnModal] = useState({
     isOpen: false,
     order: null,
     loading: false
@@ -137,64 +125,6 @@ const Index = () => {
 
   const handleCancelDelete = () => {
     setDeleteModal({ isOpen: false, order: null, loading: false });
-  };
-
-  const handleCancelClick = (order) => {
-    setCancelModal({
-      isOpen: true,
-      order,
-      loading: false
-    });
-  };
-
-  const handleConfirmCancel = async () => {
-    if (!cancelModal.order) return;
-
-    try {
-      setCancelModal(prev => ({ ...prev, loading: true }));
-      const response = await salesOrderService.cancel(cancelModal.order.id);
-
-      if (response && response.success) {
-        toast.success(response.message || t('sales.messages.cancelSuccess'));
-        fetchData();
-      } else {
-        throw new Error(response?.message || t('sales.messages.cancelFailed'));
-      }
-    } catch (error) {
-      console.error('Error cancelling sales order:', error);
-      toast.error(error.message || t('sales.messages.cancelFailed'));
-    } finally {
-      setCancelModal({ isOpen: false, order: null, loading: false });
-    }
-  };
-
-  const handleReturnClick = (order) => {
-    setReturnModal({
-      isOpen: true,
-      order,
-      loading: false
-    });
-  };
-
-  const handleConfirmReturn = async () => {
-    if (!returnModal.order) return;
-
-    try {
-      setReturnModal(prev => ({ ...prev, loading: true }));
-      const response = await salesOrderService.returnOrder(returnModal.order.id);
-
-      if (response && response.success) {
-        toast.success(response.message || t('sales.messages.returnSuccess'));
-        fetchData();
-      } else {
-        throw new Error(response?.message || t('sales.messages.returnFailed'));
-      }
-    } catch (error) {
-      console.error('Error returning sales order:', error);
-      toast.error(error.message || t('sales.messages.returnFailed'));
-    } finally {
-      setReturnModal({ isOpen: false, order: null, loading: false });
-    }
   };
 
   const handleEditOrder = (order) => {
@@ -392,32 +322,6 @@ const Index = () => {
             </button>
           )}
 
-          {(row.status.toLowerCase() === 'completed' || row.status.toLowerCase() === 'pending') && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleReturnClick(row);
-              }}
-              className="p-1 px-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-              title={t('sales.actions.return')}
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          )}
-
-          {row.status.toLowerCase() !== 'cancelled' && row.status.toLowerCase() !== 'returned' && row.status.toLowerCase() !== 'draft' && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCancelClick(row);
-              }}
-              className="p-1 px-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-              title={t('sales.actions.cancel')}
-            >
-              <XCircle className="w-4 h-4" />
-            </button>
-          )}
-
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -496,30 +400,6 @@ const Index = () => {
         onCancel={handleCancelDelete}
         loading={deleteModal.loading}
         buttonText={t('sales.actions.delete')}
-      />
-
-      {/* Cancel Confirmation Modal */}
-      <AlertModal
-        isVisible={cancelModal.isOpen}
-        modeltitle={t('sales.cancelTitle')}
-        message={t('sales.cancelMessage', { orderNumber: cancelModal.order?.order_number || '' })}
-        onConfirm={handleConfirmCancel}
-        onCancel={() => setCancelModal({ isOpen: false, order: null, loading: false })}
-        loading={cancelModal.loading}
-        buttonText={t('sales.actions.cancel')}
-        variant="warning"
-      />
-
-      {/* Return Confirmation Modal */}
-      <AlertModal
-        isVisible={returnModal.isOpen}
-        modeltitle={t('sales.returnTitle')}
-        message={t('sales.returnMessage', { orderNumber: returnModal.order?.order_number || '' })}
-        onConfirm={handleConfirmReturn}
-        onCancel={() => setReturnModal({ isOpen: false, order: null, loading: false })}
-        loading={returnModal.loading}
-        buttonText={t('sales.actions.return')}
-        variant="warning"
       />
 
       {/* New Print Preview Modal */}

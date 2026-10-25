@@ -15,7 +15,10 @@ import {
   Banknote,
   UserPlus,
   UserCog,
-  ShoppingBasket
+  ShoppingBasket,
+  BarChart3,
+  Hash,
+  History
 } from 'lucide-react'
 import WindowControls from './WindowControls'
 import FontSizeControls from './FontSizeControls'
@@ -64,6 +67,17 @@ const Layout = ({ children, onLogout, currentUser }) => {
         { icon: FileText, label: t('nav.salesList'), path: '/sales' },
         { icon: Banknote, label: t('nav.paymentTracking'), path: '/sales/payments' },
         // { icon: ShoppingBasket, label: "Sales POS", path: "/sales/pos" }
+      ]
+    },
+    {
+      id: 'reports',
+      icon: BarChart3,
+      label: t('nav.reports'),
+      isGroup: true,
+      subItems: [
+        { icon: FileText, label: t('nav.salesReport'), path: '/reports/sales' },
+        { icon: Hash, label: t('nav.hsnReport'), path: '/reports/hsn' },
+        { icon: History, label: t('nav.customerHistory'), path: '/reports/customers' }
       ]
     },
     {

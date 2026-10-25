@@ -5,6 +5,7 @@ import { initializeCustomerHandlers } from './ipcHandlers/customerHandlers.js'
 import { initializeFileHandlers } from './ipcHandlers/fileHandlers.js'
 import { initializePaymentRecordHandlers } from './ipcHandlers/paymentRecordHandlers.js'
 import { initializeSalesOrderHandlers } from './ipcHandlers/salesOrderHandlers.js'
+import { initializeReportHandlers } from './ipcHandlers/reportHandlers.js'
 import { initializeSettingsHandlers } from './ipcHandlers/settingsHandlers.js'
 import { registerTemplateHandlers } from './ipcHandlers/templateHandlers.js'
 import { registerPrinterHandlers } from './ipcHandlers/printerHandlers.js'
@@ -15,6 +16,7 @@ export function registerIpcHandlers(mainWindow, app, db, dbPath) {
   initializeCustomerHandlers(db);
   initializePaymentRecordHandlers(db);
   initializeSalesOrderHandlers(db);
+  initializeReportHandlers(db);
   initializeSettingsHandlers(db);
   registerTemplateHandlers();
   registerPrinterHandlers(mainWindow);

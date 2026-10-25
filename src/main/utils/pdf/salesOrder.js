@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit';
 import { translations, TAMIL_FONTS, mapOrderToInvoiceData, truncateString } from './utils.js';
 import { generateGSTInvoicePDF } from './gstInvoice.js';
 import { generateNonGSTInvoicePDF } from './nonGstInvoice.js';
+import { generateTaxInvoicePDF } from './taxInvoice.js';
 
 export const generateSalesOrderPDF = (orderData, templateType = 'A4', config = {}) => {
   return new Promise(async (resolve, reject) => {
@@ -69,11 +70,13 @@ export const generateSalesOrderPDF = (orderData, templateType = 'A4', config = {
         options = { size: [width, height], margin: margin };
       }
 
-      if (templateType === 'A4-GST' || templateType === 'A4-NonGST') {
+      if (templateType === 'A4-GST' || templateType === 'A4-NonGST' || templateType === 'A4-Tax') {
         const mappedData = mapOrderToInvoiceData(orderData);
-        const result = templateType === 'A4-GST' 
+        const result = templateType === 'A4-GST'
           ? await generateGSTInvoicePDF(mappedData, safeConfig)
-          : await generateNonGSTInvoicePDF(mappedData, safeConfig);
+          : templateType === 'A4-Tax'
+            ? await generateTaxInvoicePDF(mappedData, safeConfig)
+            : await generateNonGSTInvoicePDF(mappedData, safeConfig);
         resolve(result);
         return;
       }

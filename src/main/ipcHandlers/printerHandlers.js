@@ -461,7 +461,7 @@ export function registerPrinterHandlers(mainWindow) {
         });
         
         // If a specialized A4 template is active, use it
-        if (templateSetting && (templateSetting.template_name === 'A4-GST' || templateSetting.template_name === 'A4-NonGST')) {
+        if (templateSetting && (templateSetting.template_name === 'A4-GST' || templateSetting.template_name === 'A4-NonGST' || templateSetting.template_name === 'A4-Tax')) {
           templateType = templateSetting.template_name;
         }
       }
@@ -573,7 +573,7 @@ export function registerPrinterHandlers(mainWindow) {
           // Standard paper sizes (A4, Letter, Legal, etc.)
           // Sanitize specialized A4 templates for Electron (it only knows 'A4')
           let finalPageSize = settings.pageSize;
-          if (finalPageSize === 'A4-GST' || finalPageSize === 'A4-NonGST') {
+          if (finalPageSize === 'A4-GST' || finalPageSize === 'A4-NonGST' || finalPageSize === 'A4-Tax') {
             finalPageSize = 'A4';
           }
           printOptions.pageSize = finalPageSize;
@@ -749,7 +749,7 @@ export function registerPrinterHandlers(mainWindow) {
           printOptions.pageSize = { width: widthMap[settings.pageSize], height: customHeight };
         } else {
             let finalPageSize = settings.pageSize;
-            if (finalPageSize === 'A4-GST' || finalPageSize === 'A4-NonGST') finalPageSize = 'A4';
+            if (finalPageSize === 'A4-GST' || finalPageSize === 'A4-NonGST' || finalPageSize === 'A4-Tax') finalPageSize = 'A4';
             printOptions.pageSize = finalPageSize;
         }
       }

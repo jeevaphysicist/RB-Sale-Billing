@@ -278,9 +278,10 @@ const Settings = () => {
       // Check if this is an A4 GST or Non-GST invoice template
       const isGstInvoice = templateSettings.template_name === 'A4-GST';
       const isNonGstInvoice = templateSettings.template_name === 'A4-NonGST';
+      const isTaxInvoice = templateSettings.template_name === 'A4-Tax';
 
       let previewData;
-      if (isGstInvoice || isNonGstInvoice) {
+      if (isGstInvoice || isNonGstInvoice || isTaxInvoice) {
         // Prepare invoice data for GST/Non-GST templates
         previewData = {
           company: {
@@ -293,9 +294,11 @@ const Settings = () => {
             gstin: storeDetails.gstin || '33ASZPK7ROPIZM',
             fassai_no: storeDetails.fassai_no || '',
             pan: storeDetails.pan || 'AAXXP1791H',
-            email: storeDetails.email || 'info@luctusindia.com'
+            email: storeDetails.email || 'info@luctusindia.com',
+            phone: storeDetails.phone || '9876543210'
           },
           invoiceNumber: 'INV-PREVIEW-001',
+          orderDate: new Date().toISOString(),
           date: new Date().toLocaleDateString('en-GB'),
           items: previewOrder.items.map(item => ({
             description: item.product_name,
@@ -778,8 +781,8 @@ const Settings = () => {
                       {templateTab === 'sales_order' && (
                         <div className="space-y-2 pt-4 border-t border-gray-200">
                           <label className="text-xs text-gray-500 font-medium">A4 Invoice Templates</label>
-                          <div className="grid grid-cols-2 gap-3">
-                            {['A4-GST', 'A4-NonGST'].map((type) => (
+                          <div className="grid grid-cols-3 gap-3">
+                            {['A4-GST', 'A4-NonGST', 'A4-Tax'].map((type) => (
                               <button
                                 key={type}
                                 onClick={() => setTemplateSettings(prev => ({ ...prev, template_name: type }))}
@@ -790,7 +793,7 @@ const Settings = () => {
                               >
                                 <FileText size={24} className="mb-2" />
                                 <span className="text-sm font-medium">
-                                  {type === 'A4-GST' ? 'A4 GST Invoice' : 'A4 Non-GST Invoice'}
+                                  {type === 'A4-GST' ? 'A4 GST Invoice' : type === 'A4-Tax' ? 'A4 Tax Invoice' : 'A4 Non-GST Invoice'}
                                 </span>
                               </button>
                             ))}
@@ -1186,8 +1189,8 @@ const Settings = () => {
                       </div>
                     )}
 
-                    {/* Bank Details - A4 Only */}
-                    {templateSettings.template_name === 'A4' && (
+                    {/* Bank Details - A4 and A4 Tax Invoice */}
+                    {(templateSettings.template_name === 'A4' || templateSettings.template_name === 'A4-Tax') && (
                       <div className="space-y-4 pt-4 border-t border-gray-200">
                         <div>
                           <label className="text-sm font-medium text-gray-700">{t('settings.templates.paymentDetails')}</label>
@@ -1383,7 +1386,7 @@ const Settings = () => {
                         src={`${previewUrl}#toolbar=0&view=FitH`}
                         className={`w-full h-full rounded shadow-lg bg-white ${templateSettings.template_name === '80mm' ? 'max-w-[300px]' :
                           templateSettings.template_name === '50mm' ? 'max-w-[200px]' :
-                            (templateSettings.template_name === 'A4-GST' || templateSettings.template_name === 'A4-NonGST') ? 'max-w-[600px]' :
+                            ['A4-GST', 'A4-NonGST', 'A4-Tax'].includes(templateSettings.template_name) ? 'max-w-[600px]' :
                               'max-w-full'
                           }`}
                         title="Invoice Preview"

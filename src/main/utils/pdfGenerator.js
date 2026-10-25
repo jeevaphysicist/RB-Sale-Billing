@@ -7,3 +7,4 @@ export * from './pdf/utils.js';
 export * from './pdf/salesOrder.js';
 export * from './pdf/gstInvoice.js';
 export * from './pdf/nonGstInvoice.js';
+export * from './pdf/taxInvoice.js';

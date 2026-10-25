@@ -335,7 +335,7 @@ const POSBillingSystem = () => {
     updateActiveTab({ customerForm: { ...manualCustomerForm, [field]: value } });
   };
 
-  // GST: 18% on the item price (Quantity × Price) only - never on the labour charge.
+  // GST: 18% on the full row amount (Quantity × Price + Labour Charge), including the Labour Charge line.
   // Tamil Nadu (home state) customers get CGST 9% + SGST 9%; customers from any
   // other state get IGST 18%. No state entered counts as Tamil Nadu.
   const GST_RATE = 18;
@@ -962,7 +962,10 @@ const POSBillingSystem = () => {
   // Spreadsheet-style keyboard navigation between bill table cells:
   // ENTER / ↓ next row, ↑ previous row, ← / → previous / next column.
   // In text cells ← / → only leave the cell when the caret is at the start / end.
-  const BILL_COLUMNS = ['name', 'hsn', 'qty', 'price'];
+  const BILL_COLUMNS = ['name', 'hsn', 'unit', 'qty', 'price'];
+
+  // Suggestions for the Unit cell; any other unit can still be typed
+  const UNIT_OPTIONS = ['Piece', 'Nos', 'Set', 'Box', 'Pair', 'Kg', 'Gram', 'Litre', 'Meter', 'Feet', 'Roll', 'Bag', 'Hour', 'Job'];
 
   const focusBillCell = (rowIndex, column) => {
     const cell = document.querySelector(`[data-bill-row="${rowIndex}"][data-bill-col="${column}"]`);
@@ -1072,23 +1075,16 @@ const POSBillingSystem = () => {
     }
   };
 
-  // The "Labour Charge" line is added to the bill total but never taxed
-  const isLabourChargeLine = (item) =>
-    String(item?.name || '').trim().toLowerCase() === LABOUR_CHARGE_NAME.toLowerCase();
-
-  // GST base for a row = Quantity × Price (labour charge is not taxed).
-  // Rows from older bills have no separate price, so their whole amount is used.
+  // GST base for a row = Quantity × Price + Labour Charge (the derived unit price
+  // already includes the labour charge). The "Labour Charge" line is taxed too.
   const getGstBase = (item) => {
-    if (isLabourChargeLine(item)) return 0;
-    const base = item.rate !== undefined
-      ? (Number(item.qty) || 0) * (Number(item.rate) || 0)
-      : (Number(item.price) || 0) * (Number(item.qty) || 0);
+    const base = (Number(item.price) || 0) * (Number(item.qty) || 0);
     return base - (base * (Number(item.discount) || 0)) / 100;
   };
 
   // Calculate tax amounts for an item
   const calculateItemTaxAmounts = (item) => {
-    const taxRate = isLabourChargeLine(item) ? 0 : GST_RATE;
+    const taxRate = GST_RATE;
     const taxAmount = (getGstBase(item) * taxRate) / 100;
     const isIgst = taxSettings.taxType === 'IGST';
 
@@ -1179,10 +1175,6 @@ const POSBillingSystem = () => {
   // Calculate amount before tax (subtotal after item discounts)
   const amountBeforeTax = activeTab.billItems.reduce((sum, item) => sum + calculateItemTotal(item), 0);
 
-  // Labour charge included in amountBeforeTax (untaxed)
-  const labourChargeTotal = filledBillItems
-    .filter(isLabourChargeLine)
-    .reduce((sum, item) => sum + calculateItemTotal(item), 0);
 
   // Calculate tax breakdown
   const taxBreakdown = calculateTaxBreakdown();
@@ -2569,6 +2561,7 @@ const POSBillingSystem = () => {
                       <col />
                       <col style={{ width: '90px' }} />
                       <col style={{ width: '80px' }} />
+                      <col style={{ width: '80px' }} />
                       <col style={{ width: '100px' }} />
                       <col style={{ width: '50px' }} />
                     </colgroup>
@@ -2577,6 +2570,7 @@ const POSBillingSystem = () => {
                         <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">S.No</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-left text-xs font-semibold bg-gray-100">Item Description</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">HSN Code</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Unit</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Quantity</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">Price</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Action</th>
@@ -2624,6 +2618,18 @@ const POSBillingSystem = () => {
                             <td className="border border-gray-300 p-0">
                               <input
                                 type="text"
+                                list="bill-unit-options"
+                                data-bill-row={index}
+                                data-bill-col="unit"
+                                value={blank ? '' : (item?.unit || '')}
+                                onChange={(e) => updateBillRow(index, { unit: e.target.value })}
+                                onKeyDown={(e) => handleBillCellKeyDown(e, index, 'unit')}
+                                className={`${cellClass} text-center`}
+                              />
+                            </td>
+                            <td className="border border-gray-300 p-0">
+                              <input
+                                type="text"
                                 inputMode="decimal"
                                 data-bill-row={index}
                                 data-bill-col="qty"
@@ -2664,13 +2670,18 @@ const POSBillingSystem = () => {
                       {/* Filler: carries the column lines down to the bottom of the screen */}
                       {billFillerHeight > 0 && activeTab.billItems.length + 1 <= billFitRows && (
                         <tr aria-hidden="true" style={{ height: billFillerHeight }}>
-                          {Array.from({ length: 6 }, (_, col) => (
+                          {Array.from({ length: 7 }, (_, col) => (
                             <td key={col} className="border border-gray-300 bg-gray-100 p-0" />
                           ))}
                         </tr>
                       )}
                     </tbody>
                   </table>
+                  <datalist id="bill-unit-options">
+                    {UNIT_OPTIONS.map((unit) => (
+                      <option key={unit} value={unit} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -2714,14 +2725,6 @@ const POSBillingSystem = () => {
                         <span className="text-gray-700 text-xs font-medium">{t('sales.pos.rightPanel.beforeTax')}:</span>
                         <span className="font-bold text-gray-900 text-sm">₹{amountBeforeTax.toFixed(2)}</span>
                       </div>
-
-                      {/* Labour charge is part of the total but GST is not charged on it */}
-                      {labourChargeTotal > 0 && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-500 text-xs">{LABOUR_CHARGE_NAME} (no GST):</span>
-                          <span className="font-semibold text-gray-700 text-sm">₹{labourChargeTotal.toFixed(2)}</span>
-                        </div>
-                      )}
 
                       {/* Tax Breakdown */}
                       {taxSettings.enableTax && (

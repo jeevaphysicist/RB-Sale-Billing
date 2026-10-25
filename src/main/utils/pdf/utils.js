@@ -305,6 +305,7 @@ export const mapOrderToInvoiceData = (order) => {
       gstin: order.customer?.gstin || order.customer_gstin || ''
     },
     invoiceNumber: order.orderNumber || order.order_number || '',
+    orderDate: order.orderDate || order.order_date || '',
     date: (order.orderDate || order.order_date) ? `${new Date(order.orderDate || order.order_date).toLocaleDateString('en-IN')} ${order.orderTime || order.order_time || ''}` : '',
     items: mappedItems,
     gstBreakdown: gstBreakdown,

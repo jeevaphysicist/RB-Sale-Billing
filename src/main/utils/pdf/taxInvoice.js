@@ -44,6 +44,9 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
       const money = (value) =>
         `${rupee} ${num(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const formatDate = (value) => {
+        // A bare YYYY-MM-DD is already the local bill date; only full timestamps need converting
+        const plain = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+        if (plain) return `${plain[3]}-${plain[2]}-${plain[1]}`;
         const d = value ? new Date(value) : null;
         if (!d || Number.isNaN(d.getTime())) return String(invoiceData.date || '').split(' ')[0];
         return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
@@ -184,7 +187,7 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
       ];
       const headerH = 18;
       const itemH = 16;
-      const footerReserve = 230;
+      const footerReserve = config.showSignatory !== false ? 300 : 240;
 
       const drawHeader = () => {
         doc.rect(left, y, contentW, headerH).fill(GREEN);
@@ -268,6 +271,10 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
       });
       doc.font(fontBold).fontSize(9).fillColor('#000000')
         .text('(Round off)', totalsX, y + 3, { width: totalsLabelW, align: 'center' });
+      if (config.showEOE !== false) {
+        doc.font(fontBold).fontSize(8).text('E. & O. E', totalsX + totalsLabelW, y + 4, { width: totalsValueW - 4, align: 'right' });
+      }
+      y += 16;
 
       // Bank details (left)
       const bankRows = [
@@ -292,8 +299,21 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
         y = Math.max(y, bankY);
       }
 
+      // Authorised signatory (right)
+      if (config.showSignatory !== false) {
+        const signW = contentW * 0.6;
+        const signX = right - signW;
+        y += 12;
+        doc.font(fontBold).fontSize(10).fillColor('#000000')
+          .text(config.authorizedSignatoryFor || `for ${(company.name || '').toUpperCase()}`, signX, y, { width: signW, align: 'right' });
+        y = doc.y + 30;
+        doc.font(font).fontSize(10)
+          .text(config.authorizedSignatoryLabel || 'Authorised Signatory', signX, y, { width: signW, align: 'right' });
+        y = doc.y;
+      }
+
       // Contact line
-      y += 28;
+      y += 20;
       doc.font(font).fontSize(11).fillColor('#000000')
         .text('If you have any questions about this invoice, please contact', left, y, { width: contentW, align: 'center' });
       y = doc.y + 1;

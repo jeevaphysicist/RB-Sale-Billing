@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Store, User, Lock, Save, Loader2, RefreshCw, Printer, Eye, FileText, RotateCcw, LayoutTemplate, Shield, Type } from 'lucide-react';
+import { Store, User, Lock, Save, Loader2, RefreshCw, Printer, Eye, FileText, RotateCcw, Shield, Type } from 'lucide-react';
 import AccessibilitySettings from './AccessibilitySettings';
 import { toast } from 'sonner';
 import settingsService from '../../services/settingsService';
@@ -782,7 +782,7 @@ const Settings = () => {
                         <div className="space-y-2 pt-4 border-t border-gray-200">
                           <label className="text-xs text-gray-500 font-medium">A4 Invoice Templates</label>
                           <div className="grid grid-cols-3 gap-3">
-                            {['A4-GST', 'A4-NonGST', 'A4-Tax'].map((type) => (
+                            {['A4-Tax'].map((type) => (
                               <button
                                 key={type}
                                 onClick={() => setTemplateSettings(prev => ({ ...prev, template_name: type }))}
@@ -793,7 +793,7 @@ const Settings = () => {
                               >
                                 <FileText size={24} className="mb-2" />
                                 <span className="text-sm font-medium">
-                                  {type === 'A4-GST' ? 'A4 GST Invoice' : type === 'A4-Tax' ? 'A4 Tax Invoice' : 'A4 Non-GST Invoice'}
+                                  A4 Tax Invoice
                                 </span>
                               </button>
                             ))}
@@ -964,180 +964,26 @@ const Settings = () => {
                       )}
                     </div>
 
-                    {/* Custom Table Headers - A4 only */}
-                    {templateSettings.template_name?.startsWith('A4') && (
-                      <div className="space-y-6 pt-6 border-t border-gray-200 animate-in fade-in slide-in-from-top-4 duration-500">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                              <LayoutTemplate size={18} className="text-blue-500" />
-                              {t('settings.templates.customHeaders')}
-                            </h4>
-                            <p className="text-[11px] text-gray-500 mt-0.5">{t('settings.templates.customHeadersDesc')}</p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 max-w-2xl">
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerSl')}</label>
-                            <input
-                              type="text"
-                              maxLength={10}
-                              placeholder="Sl."
-                              value={templateSettings.config.headerSl || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerSl: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerDesc')}</label>
-                            <input
-                              type="text"
-                              maxLength={40}
-                              placeholder="Description of Goods"
-                              value={templateSettings.config.headerDescription || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerDescription: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerHsn')}</label>
-                            <input
-                              type="text"
-                              maxLength={15}
-                              placeholder="HSN/SAC"
-                              value={templateSettings.config.headerHsn || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerHsn: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerQty')}</label>
-                            <input
-                              type="text"
-                              maxLength={15}
-                              placeholder="Quantity"
-                              value={templateSettings.config.headerQty || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerQty: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerRate')}</label>
-                            <input
-                              type="text"
-                              maxLength={15}
-                              placeholder="Rate"
-                              value={templateSettings.config.headerRate || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerRate: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerPer')}</label>
-                            <input
-                              type="text"
-                              maxLength={12}
-                              placeholder="per"
-                              value={templateSettings.config.headerPer || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerPer: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerGst')}</label>
-                            <input
-                              type="text"
-                              maxLength={12}
-                              placeholder="GST%"
-                              value={templateSettings.config.headerGst || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerGst: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerTax')}</label>
-                            <input
-                              type="text"
-                              maxLength={12}
-                              placeholder="Tax%"
-                              value={templateSettings.config.headerTax || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerTax: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-1 border-b border-gray-50 last:border-0">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.headerAmount')}</label>
-                            <input
-                              type="text"
-                              maxLength={15}
-                              placeholder="Amount"
-                              value={templateSettings.config.headerAmount || ''}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, headerAmount: e.target.value }
-                              }))}
-                              className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-gray-300"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 items-center gap-4 py-3 border-t border-gray-100 mt-2">
-                            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-tight">{t('settings.templates.descLimit')}</label>
-                            <div className="space-y-1">
-                              <input
-                                type="number"
-                                value={templateSettings.config.descLimit || 45}
-                                onChange={(e) => setTemplateSettings(prev => ({
-                                  ...prev,
-                                  config: { ...prev.config, descLimit: parseInt(e.target.value) }
-                                }))}
-                                className="w-24 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
-                              />
-                              <p className="text-[10px] text-gray-400 italic">{t('settings.templates.descLimitHelp')}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Authorized Signatory Settings - A4 only */}
                     {templateSettings.template_name?.startsWith('A4') && (
                       <div className="space-y-4 pt-4 border-t border-gray-200">
                         <div>
                           <label className="text-sm font-medium text-gray-700">Authorized Signatory</label>
                           <p className="text-xs text-gray-500 mt-1">Configure the authorized signatory section text.</p>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="showSignatory"
+                            checked={templateSettings.config.showSignatory !== false}
+                            onChange={(e) => setTemplateSettings(prev => ({
+                              ...prev,
+                              config: { ...prev.config, showSignatory: e.target.checked }
+                            }))}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <label htmlFor="showSignatory" className="text-sm text-gray-700">Show authorized signatory on the bill</label>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

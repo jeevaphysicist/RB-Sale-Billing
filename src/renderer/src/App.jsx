@@ -22,6 +22,10 @@ const SalesView = React.lazy(() => import("./pages/Sales/Orders/ViewOrderPage"))
 const SalesOrderForm = React.lazy(() => import("./pages/Sales/Orders/SalesOrderForm"));
 const SalesPaymentRecord = React.lazy(() => import("./pages/Sales/Payment record/Index"));
 const PetpoojaSalesAdd = React.lazy(() => import("./pages/Sales/Orders/PetpoojaSalesAdd"));
+const SalesReport = React.lazy(() => import("./pages/Reports/SalesReport"));
+const HsnReport = React.lazy(() => import("./pages/Reports/HsnReport"));
+const CustomerReport = React.lazy(() => import("./pages/Reports/CustomerReport"));
+const CustomerHistory = React.lazy(() => import("./pages/Reports/CustomerHistory"));
 const Suppliers = React.lazy(() => import("./pages/Masters/Supplier/Index"));
 const Customers = React.lazy(() => import("./pages/Masters/Customer/Index"));
 const Settings = React.lazy(() => import("./pages/Settings/Index"));
@@ -42,6 +46,10 @@ function AppContent() {
     { path: "/sales/order/edit/:id", element: <SalesOrderForm /> },
     { path: "/sales/payments", element: <SalesPaymentRecord /> },
     { path: "/sales/pos", element: <PetpoojaSalesAdd />, noLayout: true },
+    { path: "/reports/sales", element: <SalesReport /> },
+    { path: "/reports/hsn", element: <HsnReport /> },
+    { path: "/reports/customers", element: <CustomerReport /> },
+    { path: "/reports/customers/:id", element: <CustomerHistory /> },
     { path: "/suppliers", element: <Suppliers /> },
     { path: "/suppliers/import", element: <ImportSuppliers /> },
     { path: "/customers", element: <Customers /> },

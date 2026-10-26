@@ -41,6 +41,8 @@
     "expenseManagement": "Expense Management",
     "reports": "Reports",
     "salesReport": "Sales Report",
+    "hsnReport": "HSN Report",
+    "customerHistory": "Customer Purchase History",
     "purchaseReport": "Purchase Report",
     "profitLoss": "Profit & Loss",
     "stockReport": "Stock Report",
@@ -268,7 +270,7 @@
   "settings": {
     "title": "Settings",
     "storeDetails": "Store Details",
-    "printTemplates": "Print Templates",
+    "printTemplates": "Templates",
     "printerSettings": "Printer Settings",
     "accessibility": "Accessibility",
     "store": {
@@ -456,7 +458,7 @@
     "refundExceedsMaximum": "Exceeds maximum refundable amount",
     "printBill": "Print Bill",
     "saveDraft": "Save Draft",
-    "manageOrders": "Manage your sales orders. View, create, or delete sales.",
+    "manageOrders": "Manage your sales orders. View, create, or cancel sales.",
     "createOrder": "Create New Sales",
     "searchPlaceholder": "Search sales...",
     "noOrders": "No sales found",
@@ -644,8 +646,8 @@
         "tabNavigate": "Tab to navigate",
         "totalPaid": "Total Paid",
         "remaining": "Remaining",
-        "completePayment": "Complete Payment",
-        "completeAndPrint": "Complete & Print"
+        "completePayment": "Save Bill",
+        "completeAndPrint": "Save & Print"
       },
       "table": {
         "hash": "S.No",
@@ -911,6 +913,7 @@
       "thisWeek": "This Week",
       "thisMonth": "This Month",
       "thisYear": "This Year",
+      "allTime": "All Time",
       "custom": "Custom Range"
     },
     "table": {
@@ -1042,6 +1045,8 @@
     "enterState": "Enter state",
     "enterPincode": "Enter pincode",
     "enterGSTNumber": "Enter GST number",
+    "vehicleNumber": "Vehicle Number",
+    "enterVehicleNumber": "Enter vehicle number",
     "enterOpeningBalance": "Enter opening balance",
     "enterCreditLimit": "Enter credit limit",
     "manageDescription": "Manage your customers. Create, edit, or delete customer records as needed.",
@@ -1574,6 +1579,7 @@
       "thisWeek": "This Week",
       "thisMonth": "This Month",
       "thisYear": "This Year",
+      "allTime": "All Time",
       "custom": "Custom Range"
     },
     "table": {
@@ -1971,6 +1977,160 @@
       "generatingPreview": "Generating Preview...",
       "previewFailed": "Failed to generate preview"
     }
+  },
+  "auditSalesReport": {
+    "title": "Sales Report",
+    "transactions": "Transactions",
+    "refresh": "Refresh",
+    "all": "All",
+    "page": "page",
+    "total": "Total",
+    "recordCount": "{{count}} records",
+    "searchPlaceholder": "Search bill no, customer, GSTIN...",
+    "empty": "No transactions for {{range}}",
+    "loadFailed": "Failed to load sales report",
+    "noDataToExport": "No data to export",
+    "missingBillsTitle": "{{count}} bill number(s) missing in this period",
+    "missingBillNo": "Missing Bill No",
+    "note": "Cancelled and returned bills are listed for audit but not included in totals. Cash/Card/UPI/Other show all payments received against each bill; Credit is the amount given on credit at billing.",
+    "presets": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisWeek": "This Week",
+      "thisMonth": "This Month",
+      "thisYear": "This Year",
+      "allTime": "All Time",
+      "custom": "Custom"
+    },
+    "statusFilter": {
+      "all": "All bills",
+      "active": "Completed only",
+      "cancelled": "Cancelled / Returned"
+    },
+    "status": {
+      "completed": "Completed",
+      "cancelled": "Cancelled",
+      "returned": "Returned"
+    },
+    "cards": {
+      "bills": "Bills",
+      "netSales": "Net Sales",
+      "cancelled": "{{count}} cancelled/returned"
+    },
+    "columns": {
+      "billNo": "Bill No",
+      "date": "Date",
+      "time": "Time",
+      "customer": "Customer",
+      "mobile": "Mobile",
+      "gstin": "GSTIN",
+      "taxable": "Taxable Value",
+      "nonTaxable": "Non-Taxable",
+      "discount": "Discount",
+      "roundOff": "Round Off",
+      "netAmount": "Net Amount",
+      "cash": "Cash",
+      "card": "Card",
+      "other": "Other",
+      "credit": "Credit",
+      "balanceDue": "Balance Due",
+      "status": "Status",
+      "billingUser": "Billing User"
+    }
+  },
+  "hsnReport": {
+    "title": "HSN Report",
+    "badge": "Sales",
+    "total": "Total",
+    "lineCount": "{{count}} HSN lines",
+    "searchPlaceholder": "Search HSN, product...",
+    "empty": "No records found for the selected period",
+    "loadFailed": "Failed to load HSN report",
+    "noDataToExport": "No data to export",
+    "noHsn": "No HSN",
+    "showBills": "Show bills",
+    "fixHsn": "Edit bill to fix HSN",
+    "invalidHsnTitle": "{{count}} line(s) have a missing or invalid HSN code",
+    "invalidHsnHint": "HSN codes must be 4, 6 or 8 digits. Correct them on the bills before GST filing.",
+    "note": "Cancelled and returned bills are excluded. Taxable value is the value GST was charged on; Labour is untaxed labour charge included in the line amount. Bill-level discounts are not split across HSN lines.",
+    "cards": {
+      "hsnLines": "HSN Lines",
+      "totalQty": "Total Qty",
+      "taxableValue": "Taxable Value",
+      "taxAmount": "Tax Amount",
+      "netSales": "Net Sales"
+    },
+    "columns": {
+      "hsnCode": "HSN Code",
+      "products": "Products",
+      "unit": "Unit",
+      "taxRate": "Tax Rate",
+      "qty": "Qty",
+      "taxable": "Taxable Value",
+      "totalTax": "Total Tax",
+      "labour": "Labour",
+      "netValue": "Net Value",
+      "bills": "Bills"
+    }
+  },
+  "customerHistoryReport": {
+    "title": "Customer Purchase History",
+    "historyTitle": "Purchase History",
+    "total": "Total",
+    "walkIn": "Walk-in Customer",
+    "customerCount": "{{count}} customers",
+    "searchPlaceholder": "Search name, mobile, GSTIN...",
+    "historySearchPlaceholder": "Search bill no, product, HSN...",
+    "addPayment": "Add payment",
+    "empty": "No customer purchases for {{range}}",
+    "emptyHistory": "No records for {{range}}",
+    "loadFailed": "Failed to load customer report",
+    "noDataToExport": "No data to export",
+    "balanceOnly": "Balance due only",
+    "overLimit": "Over credit limit ({{limit}})",
+    "back": "Back to customers",
+    "openBill": "Open bill",
+    "openingBalance": "Opening Balance",
+    "closingBalance": "Closing Balance",
+    "billEntry": "Bill",
+    "paymentEntry": "Payment received",
+    "note": "Cancelled and returned bills are not counted. Paid includes all payments received against the bills; Balance Due is what is still owed today. Click a customer to see their full history.",
+    "historyNote": "Cancelled and returned bills are shown in the Bills tab but are not counted in totals, products or the statement.",
+    "tabs": {
+      "bills": "Bills",
+      "products": "Products Bought",
+      "statement": "Statement"
+    },
+    "cards": {
+      "customers": "Customers",
+      "totalPurchase": "Total Purchase",
+      "collected": "Collected",
+      "outstanding": "Outstanding"
+    },
+    "columns": {
+      "customer": "Customer",
+      "mobile": "Mobile",
+      "bills": "Bills",
+      "firstPurchase": "First Purchase",
+      "lastPurchase": "Last Purchase",
+      "daysSince": "Days Since Last",
+      "totalPurchase": "Total Purchase",
+      "avgBill": "Avg Bill",
+      "paid": "Paid",
+      "balanceDue": "Balance Due",
+      "creditLimit": "Credit Limit",
+      "items": "Items",
+      "product": "Product",
+      "rate": "Rate",
+      "amount": "Amount",
+      "totalValue": "Total Value",
+      "timesBought": "Times Bought",
+      "lastBought": "Last Bought",
+      "particulars": "Particulars",
+      "action": "Actions",
+      "debit": "Debit",
+      "credit": "Credit",
+      "balance": "Balance"
+    }
   }
 }
-

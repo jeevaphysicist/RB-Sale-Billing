@@ -1,10 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
-import ta from './locales/ta.json';
-
-// Get saved language from localStorage or default to English
-const savedLanguage = localStorage.getItem('appLanguage') || 'en';
 
 i18n
   .use(initReactI18next)
@@ -12,13 +8,10 @@ i18n
     resources: {
       en: {
         translation: en
-      },
-      ta: {
-        translation: ta
       }
     },
-    lng: savedLanguage, // Default language
-    fallbackLng: 'en', // Fallback language if translation is missing
+    lng: 'en',
+    fallbackLng: 'en',
     interpolation: {
       escapeValue: false // React already escapes values
     },

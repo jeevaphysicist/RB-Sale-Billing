@@ -25,7 +25,6 @@ export const LanguageProvider = ({ children }) => {
     currentLanguage,
     changeLanguage,
     isEnglish: currentLanguage === 'en',
-    isTamil: currentLanguage === 'ta'
   };
 
   return (

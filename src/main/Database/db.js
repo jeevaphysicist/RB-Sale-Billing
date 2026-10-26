@@ -3,6 +3,61 @@ import bcrypt from 'bcryptjs';
 
 export let globalDb = null;
 
+// Older databases created sales_order_items with FOREIGN KEY (product_id) REFERENCES products(id).
+// The products table was dropped (drop_removed_modules_tables), and with foreign keys ON
+// SQLite then rejects every insert into sales_order_items with "no such table: main.products".
+// SQLite cannot drop a foreign key, so rebuild the table without it, keeping every column and row.
+// Runs only while that stale foreign key is present.
+const removeStaleProductForeignKeys = (db, callback) => {
+  db.all(`PRAGMA foreign_key_list(sales_order_items)`, (err, fks) => {
+    if (err || !fks || !fks.some(fk => fk.table === 'products')) {
+      return callback();
+    }
+
+    db.get(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sales_order_items'`, (err, row) => {
+      if (err || !row) {
+        console.error('❌ Could not read sales_order_items schema:', err?.message);
+        return callback();
+      }
+
+      const newTableSql = row.sql
+        .replace(/,\s*FOREIGN KEY\s*\(\s*product_id\s*\)\s*REFERENCES\s+products\s*\(\s*id\s*\)/i, '')
+        .replace(/CREATE TABLE\s+(IF NOT EXISTS\s+)?["`]?sales_order_items["`]?/i, 'CREATE TABLE sales_order_items_rebuild');
+
+      if (/REFERENCES\s+products/i.test(newTableSql)) {
+        console.error('❌ Could not remove the products foreign key from sales_order_items');
+        return callback();
+      }
+
+      const statements = [
+        'PRAGMA foreign_keys = OFF',
+        'BEGIN TRANSACTION',
+        'DROP TABLE IF EXISTS sales_order_items_rebuild',
+        newTableSql,
+        'INSERT INTO sales_order_items_rebuild SELECT * FROM sales_order_items',
+        'DROP TABLE sales_order_items',
+        'ALTER TABLE sales_order_items_rebuild RENAME TO sales_order_items',
+        'COMMIT'
+      ];
+
+      const run = (index) => {
+        if (index >= statements.length) {
+          console.log('✅ Removed stale products foreign key from sales_order_items');
+          return db.run('PRAGMA foreign_keys = ON', () => callback());
+        }
+        db.run(statements[index], (err) => {
+          if (err) {
+            console.error(`❌ Rebuilding sales_order_items failed at "${statements[index].slice(0, 60)}":`, err.message);
+            return db.run('ROLLBACK', () => db.run('PRAGMA foreign_keys = ON', () => callback()));
+          }
+          run(index + 1);
+        });
+      };
+      run(0);
+    });
+  });
+};
+
 // Migration function to add new columns to existing tables
 const runMigrations = (db, callback) => {
   const migrations = [
@@ -12,6 +67,10 @@ const runMigrations = (db, callback) => {
         ALTER TABLE customers 
         ADD COLUMN loyalty_points REAL DEFAULT 0
       `
+    },
+    {
+      name: 'add_vehicle_number_to_customers',
+      sql: `ALTER TABLE customers ADD COLUMN vehicle_number TEXT`
     },
     {
       name: 'add_order_number_to_sales_orders',
@@ -105,6 +164,10 @@ const runMigrations = (db, callback) => {
     {
       name: 'add_unit_to_sales_order_items',
       sql: `ALTER TABLE sales_order_items ADD COLUMN unit TEXT`
+    },
+    {
+      name: 'add_labour_charge_to_sales_order_items',
+      sql: `ALTER TABLE sales_order_items ADD COLUMN labour_charge REAL DEFAULT 0`
     },
 /*
     {
@@ -326,6 +389,7 @@ export const initDB = (dbPath) => {
                 ifsc_code TEXT,
                 upi_id TEXT,
                 notes TEXT,
+                vehicle_number TEXT,
                 last_purchase_date DATETIME,
                 created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
                 updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes'))
@@ -473,7 +537,8 @@ export const initDB = (dbPath) => {
                 gross_amount REAL DEFAULT 0,
                 net_amount REAL DEFAULT 0,
                 final_amount REAL DEFAULT 0,
-                
+                labour_charge REAL DEFAULT 0,
+
                 created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
                 
                 FOREIGN KEY (order_id) REFERENCES sales_orders(id) ON DELETE CASCADE
@@ -644,21 +709,9 @@ export const initDB = (dbPath) => {
         tables.push({
           name: 'store_settings_seed',
           sql: `
-            INSERT INTO store_settings (store_name, address_line1, city, state, pincode, phone, email, gstin)
-            SELECT 'My Store', '123 Main St', 'City', 'State', '123456', '9876543210', 'store@example.com', '22AAAAA0000A1Z5'
+            INSERT INTO store_settings (store_name)
+            SELECT ''
             WHERE NOT EXISTS (SELECT 1 FROM store_settings)
-          `
-        });
-
-        // Insert default Walk-in Customer if not exists
-        tables.push({
-          name: 'customers_seed_walkin',
-          sql: `
-            INSERT INTO customers (
-              id, customer_name, customer_code, mobile_number, customer_type, address_line_1, city, state, pincode, country
-            )
-            SELECT 0, 'Walk-in Customer', 'WALK-IN', '0000000000', 'Retail', '', '', '', '', 'India'
-            WHERE NOT EXISTS (SELECT 1 FROM customers WHERE id = 0 OR customer_code = 'WALK-IN')
           `
         });
 
@@ -676,7 +729,7 @@ export const initDB = (dbPath) => {
           if (index >= tables.length) {
             // Run migrations after tables are created
             runMigrations(db, () => {
-              return resolve(db);
+              removeStaleProductForeignKeys(db, () => resolve(db));
             });
             return;
           }

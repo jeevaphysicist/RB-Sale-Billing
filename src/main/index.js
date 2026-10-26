@@ -10,6 +10,9 @@ import { initDB, verifyDatabase } from './Database/db.js';
 
 
 
+// Dedicated application data folder (database, settings). Must be set before anything reads userData.
+app.setPath('userData', path.join(app.getPath('appData'), 'RabtoiseBilling'));
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const settingsPath = path.join(app.getPath('userData'), 'rabtoise-billing-inventory-settings.json');
 

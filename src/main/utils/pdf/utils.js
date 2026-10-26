@@ -292,7 +292,9 @@ export const mapOrderToInvoiceData = (order) => {
       address: order.storeDetails?.address_line1 || order.storeDetails?.address || '',
       address2: order.storeDetails?.address_line2 || '',
       city: order.storeDetails?.city ? `${order.storeDetails.city}${order.storeDetails?.pincode ? ' - ' + order.storeDetails.pincode : ''}` : '',
-      district: order.storeDetails?.district ? `DIST:${order.storeDetails.district}, ${order.storeDetails?.state || ''}` : '',
+      district: order.storeDetails?.district
+        ? `DIST:${order.storeDetails.district}${order.storeDetails?.state ? ', ' + order.storeDetails.state : ''}`
+        : (order.storeDetails?.state || ''),
       gstin: order.storeDetails?.gstin || '',
       pan: order.storeDetails?.pan || '',
       phone: order.storeDetails?.phone || '',
@@ -305,6 +307,7 @@ export const mapOrderToInvoiceData = (order) => {
       gstin: order.customer?.gstin || order.customer_gstin || ''
     },
     invoiceNumber: order.orderNumber || order.order_number || '',
+    orderDate: order.orderDate || order.order_date || '',
     date: (order.orderDate || order.order_date) ? `${new Date(order.orderDate || order.order_date).toLocaleDateString('en-IN')} ${order.orderTime || order.order_time || ''}` : '',
     items: mappedItems,
     gstBreakdown: gstBreakdown,

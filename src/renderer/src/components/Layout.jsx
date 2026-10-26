@@ -14,9 +14,11 @@ import {
   Menu,
   Banknote,
   UserPlus,
-  Truck,
   UserCog,
-  ShoppingBasket
+  ShoppingBasket,
+  BarChart3,
+  Hash,
+  History
 } from 'lucide-react'
 import WindowControls from './WindowControls'
 import FontSizeControls from './FontSizeControls'
@@ -68,13 +70,23 @@ const Layout = ({ children, onLogout, currentUser }) => {
       ]
     },
     {
+      id: 'reports',
+      icon: BarChart3,
+      label: t('nav.reports'),
+      isGroup: true,
+      subItems: [
+        { icon: FileText, label: t('nav.salesReport'), path: '/reports/sales' },
+        { icon: Hash, label: t('nav.hsnReport'), path: '/reports/hsn' },
+        { icon: History, label: t('nav.customerHistory'), path: '/reports/customers' }
+      ]
+    },
+    {
       id: 'parties',
       icon: Users,
       label: 'Parties', // Using hardcoded label 'Parties' as key might not exist
       isGroup: true,
       subItems: [
-        { icon: UserPlus, label: t('nav.customers'), path: '/customers', defaultSub: '/customers' },
-        { icon: Truck, label: t('nav.suppliers'), path: '/suppliers', defaultSub: '/suppliers' }
+        { icon: UserPlus, label: t('nav.customers'), path: '/customers', defaultSub: '/customers' }
       ]
     },
     {
@@ -88,12 +100,20 @@ const Layout = ({ children, onLogout, currentUser }) => {
     }
   ]
 
-  const isActivePath = (path) => {
+  const matchesPath = (path) => {
     if (path === '/') {
       return location.pathname === '/'
     }
-    return location.pathname.startsWith(path)
+    return location.pathname === path || location.pathname.startsWith(path + '/')
   }
+
+  // Longest matching menu path wins, so /sales/payments does not also highlight /sales
+  const bestMatchPath = mainMenuItems
+    .flatMap(item => [item.path, ...(item.subItems || []).flatMap(s => [s.path, ...(s.submenuItems || []).map(n => n.path)])])
+    .filter(p => p && matchesPath(p))
+    .reduce((best, p) => (p.length > best.length ? p : best), '')
+
+  const isActivePath = (path) => !!path && path === bestMatchPath
 
   const isMenuActive = (item) => {
     // Check if main item is active

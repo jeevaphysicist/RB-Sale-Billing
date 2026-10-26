@@ -396,9 +396,11 @@ export const generateNonGSTInvoicePDF = (invoiceData, config = {}) => {
       // Tax Details
       currentY += 15;
       doc.fontSize(9).font('Helvetica');
-      doc.font('Helvetica-Bold').text('PAN: ', margin + 10, currentY);
-      doc.font('Helvetica').text(invoiceData.company?.pan || 'AAXXP1791H', margin + 45, currentY);
-      currentY += 15;
+      if (invoiceData.company?.pan) {
+        doc.font('Helvetica-Bold').text('PAN: ', margin + 10, currentY);
+        doc.font('Helvetica').text(invoiceData.company.pan, margin + 45, currentY);
+        currentY += 15;
+      }
       doc.font('Helvetica-Bold').text('Note: ', margin + 10, currentY);
       doc.font('Helvetica').text('This invoice is for non-GST applicable products', margin + 45, currentY);
       
@@ -424,7 +426,7 @@ export const generateNonGSTInvoicePDF = (invoiceData, config = {}) => {
       
       // Signature section
       const signatureY = declarationY + declarationHeight - 40;
-      const forText = config.authorizedSignatoryFor || `for ${invoiceData.company?.name || 'LUCTUS INDIA'}`;
+      const forText = config.authorizedSignatoryFor || `for ${invoiceData.company?.name || ''}`;
       
       doc.fontSize(10).font('Helvetica-Bold')
          .text(forText, margin + contentWidth - 120, signatureY, {

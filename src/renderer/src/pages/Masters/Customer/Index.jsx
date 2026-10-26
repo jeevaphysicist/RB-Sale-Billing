@@ -163,30 +163,6 @@ const Index = () => {
       )
     },
     {
-      key: 'email',
-      label: t('customers.email'),
-      sortable: true,
-      render: (value) => (
-        <span className="text-sm text-gray-600">{value || '-'}</span>
-      )
-    },
-    {
-      key: 'city',
-      label: t('customers.city'),
-      sortable: true,
-      render: (value) => (
-        <span className="text-sm text-gray-600">{value || '-'}</span>
-      )
-    },
-    {
-      key: 'customer_type',
-      label: t('products.type'),
-      sortable: true,
-      render: (value) => (
-        <span className="text-sm text-gray-600">{value || '-'}</span>
-      )
-    },
-    {
       key: 'customer_status',
       label: t('common.status'),
       sortable: true,

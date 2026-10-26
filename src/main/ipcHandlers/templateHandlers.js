@@ -103,15 +103,17 @@ export function registerTemplateHandlers() {
   // Generate Preview (No DB Save)
   ipcMain.handle('template:generate-preview', async (event, { data, templateName, config }) => {
     try {
-      const { generateSalesOrderPDF, generateGSTInvoicePDF, generateNonGSTInvoicePDF } = await import('../utils/pdfGenerator.js');
+      const { generateSalesOrderPDF, generateGSTInvoicePDF, generateNonGSTInvoicePDF, generateTaxInvoicePDF } = await import('../utils/pdfGenerator.js');
 
-      // Check if this is an A4 GST or Non-GST invoice template
-      if (templateName === 'A4-GST' || templateName === 'A4-NonGST') {
+      // Check if this is an A4 GST, Non-GST or Tax invoice template
+      if (templateName === 'A4-GST' || templateName === 'A4-NonGST' || templateName === 'A4-Tax') {
         console.log('🎯 Generating invoice PDF for template:', templateName);
         let pdfResult;
         try {
           if (templateName === 'A4-GST') {
             pdfResult = await generateGSTInvoicePDF(data, config);
+          } else if (templateName === 'A4-Tax') {
+            pdfResult = await generateTaxInvoicePDF(data, config);
           } else {
             pdfResult = await generateNonGSTInvoicePDF(data, config);
           }

@@ -1,12 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, Trash2, User, CreditCard, Smartphone, Gift, Plus, X, ChevronDown, ChevronUp, Eye, Download, Printer, Loader2 } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, User, CreditCard, Smartphone, Gift, Plus, X, Eye, Download, Printer, Loader2, Save } from 'lucide-react';
 import WindowControls from '../../../components/WindowControls';
 import POSHeader from '../../../components/POSHeader';
 import ConfirmationDialog from '../../../components/ConfirmationDialog';
 import PrintPreviewModal from '../../../components/PrintPreviewModal';
-import CustomerAddEditForm from '../../Masters/Customer/AddEditForm';
+import CustomerAddEditForm, { STATES } from '../../Masters/Customer/AddEditForm';
 import { customerService } from '../../../services/customerService';
 import { salesOrderService } from '../../../services/salesOrderService';
 import { toast } from 'sonner';
@@ -45,7 +45,12 @@ const POSBillingSystem = () => {
           category: item.category || 'General',
           hsnCode: item.hsn_code || '',
           tax: item.tax_rate || 0,
-          unit: item.unit || 'Piece'
+          unit: item.unit || 'Piece',
+          labourCharge: item.labour_charge || 0,
+          // Price per unit as typed: the saved unit price includes the labour charge
+          rate: item.quantity > 0
+            ? ((item.unit_price || 0) * item.quantity - (item.labour_charge || 0)) / item.quantity
+            : (item.unit_price || 0)
         }));
 
         // Get discount type from totals
@@ -94,6 +99,10 @@ const POSBillingSystem = () => {
             phone: customerData.mobile_number || '',
             email: customerData.email || '',
             address: `${customerData.address_line_1 || ''}${customerData.address_line_2 ? ', ' + customerData.address_line_2 : ''}, ${customerData.city || ''}, ${customerData.state || ''} - ${customerData.pincode || ''}`.trim(),
+            addressLine1: customerData.address_line_1 || '',
+            state: customerData.state || '',
+            pincode: customerData.pincode || '',
+            vehicleNumber: customerData.vehicle_number || '',
             gstin: customerData.gstin || '',
             points: customerData.loyalty_points || 0,
             price_category: customerData.price_category || 'Retail'
@@ -131,23 +140,6 @@ const POSBillingSystem = () => {
       toast.error(t('sales.pos.errorLoading'));
       navigate('/sales');
     }
-  };
-  const WALK_IN_CUSTOMER_NAME = 'Walk-in Customer';
-
-  // Default Walk-in Customer (id null until loaded from DB)
-  const defaultWalkInCustomer = {
-    id: null,
-    name: WALK_IN_CUSTOMER_NAME,
-    type: 'Retail',
-    phone: '',
-    email: '',
-    address: '',
-    city: '',
-    state: '',
-    pincode: '',
-    gstin: '',
-    businessName: '',
-    points: 0
   };
 
   // LocalStorage keys for persistence
@@ -269,11 +261,74 @@ const POSBillingSystem = () => {
     });
   };
 
-  // Safe tax settings with defaults (for backward compatibility with localStorage)
-  const taxSettings = activeTab?.taxSettings || {
-    enableTax: false,
-    taxType: 'SGST',
-    taxIncludedInPrice: true
+  // Customer details shown beside the customer search.
+  // With a selected customer the fields show that customer and can be edited for
+  // this bill only (mobile number locked);
+  // otherwise they hold manually typed details that become a new customer on save.
+  const EMPTY_CUSTOMER_FORM = {
+    customer_name: '',
+    mobile_number: '',
+    gstin: '',
+    state: '',
+    vehicle_number: '',
+    address_line_1: '',
+    pincode: ''
+  };
+  const manualCustomerForm = { ...EMPTY_CUSTOMER_FORM, ...(activeTab.customerForm || {}) };
+  const hasSelectedCustomer = !!activeTab.selectedCustomer;
+  const customerFormValues = hasSelectedCustomer
+    ? {
+      customer_name: activeTab.selectedCustomer.name || '',
+      mobile_number: activeTab.selectedCustomer.phone || '',
+      gstin: activeTab.selectedCustomer.gstin || '',
+      state: activeTab.selectedCustomer.state || '',
+      vehicle_number: activeTab.selectedCustomer.vehicleNumber || '',
+      address_line_1: activeTab.selectedCustomer.addressLine1 || '',
+      pincode: activeTab.selectedCustomer.pincode || ''
+    }
+    : manualCustomerForm;
+  const hasManualCustomerDetails = !hasSelectedCustomer &&
+    Object.values(manualCustomerForm).some(value => String(value || '').trim() !== '');
+
+  // Form field -> property on the selected (mapped) customer object
+  const SELECTED_CUSTOMER_KEYS = {
+    customer_name: 'name',
+    gstin: 'gstin',
+    state: 'state',
+    vehicle_number: 'vehicleNumber',
+    address_line_1: 'addressLine1',
+    pincode: 'pincode'
+  };
+
+  const updateCustomerFormField = (field, value) => {
+    if (hasSelectedCustomer) {
+      // Edits to a selected customer apply to this bill only - the customer
+      // record is not changed. The mobile number (the customer's identity) stays fixed.
+      const key = SELECTED_CUSTOMER_KEYS[field];
+      if (!key) return;
+      updateActiveTab({
+        selectedCustomer: {
+          ...activeTab.selectedCustomer,
+          [key]: value,
+          ...(field === 'address_line_1' ? { address: value } : {})
+        }
+      });
+      return;
+    }
+    updateActiveTab({ customerForm: { ...manualCustomerForm, [field]: value } });
+  };
+
+  // GST: 18% on the full row amount (Quantity × Price + Labour Charge), including the Labour Charge line.
+  // Tamil Nadu (home state) customers get CGST 9% + SGST 9%; customers from any
+  // other state get IGST 18%. No state entered counts as Tamil Nadu.
+  const GST_RATE = 18;
+  const GST_HOME_STATE = 'tamilnadu';
+  const customerStateKey = String(customerFormValues.state || '').toLowerCase().replace(/[^a-z]/g, '');
+  const isIgstCustomer = customerStateKey !== '' && customerStateKey !== GST_HOME_STATE;
+  const taxSettings = {
+    enableTax: true,
+    taxType: isIgstCustomer ? 'IGST' : 'SGST',
+    taxIncludedInPrice: false
   };
 
   // Shared states
@@ -307,8 +362,40 @@ const POSBillingSystem = () => {
   const splitPaymentUpiRef = useRef(null);
   const splitPaymentCreditRef = useRef(null);
   const [lastUpdatedItemId, setLastUpdatedItemId] = useState(null);
+  // Number of bill table rows that fit the visible table area (recomputed on resize)
+  const [billFitRows, setBillFitRows] = useState(10);
+  // Row height that makes the visible rows fill the table area exactly (no leftover strip at the bottom)
+  const [billRowHeight, setBillRowHeight] = useState(null);
+  // Text being typed into a Quantity / Price cell: { row, col, text }
+  const [billCellDraft, setBillCellDraft] = useState(null);
+
+  useEffect(() => {
+    const container = billItemsContainerRef.current;
+    if (!container) return;
+    const measure = () => {
+      const headerHeight = container.querySelector('thead')?.getBoundingClientRect().height || 0;
+      const firstRow = container.querySelector('tbody tr');
+      // Natural height: drop the stretched height first so the measurement does not feed back
+      let rowHeight = 33;
+      if (firstRow) {
+        const stretched = firstRow.style.height;
+        firstRow.style.height = '';
+        rowHeight = firstRow.getBoundingClientRect().height || 33;
+        firstRow.style.height = stretched;
+      }
+      // 1px spare so rounding never adds a scrollbar
+      const available = container.clientHeight - headerHeight - 1;
+      const rows = Math.max(1, Math.floor(available / rowHeight));
+      setBillFitRows(rows);
+      // Spread the leftover space over the rows so the last row ends exactly at the bottom
+      setBillRowHeight(Math.floor((available / rows) * 100) / 100);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
   // Tax settings are now per-tab (removed global state)
-  const [orderSummaryExpanded, setOrderSummaryExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
 
@@ -437,7 +524,7 @@ const POSBillingSystem = () => {
     }
 
     const tabToClose = tabs.find(t => t.id === tabId);
-    if (tabToClose.billItems.length > 0) {
+    if (getBilledItems(tabToClose.billItems).length > 0) {
       setConfirmation({
         isOpen: true,
         title: t('sales.pos.closeBill'),
@@ -487,6 +574,8 @@ const POSBillingSystem = () => {
           alternatePhone: customer.alternate_number || '',
           email: customer.email || '',
           address: `${customer.address_line_1 || ''}${customer.address_line_2 ? ', ' + customer.address_line_2 : ''}, ${customer.city || ''}, ${customer.state || ''} - ${customer.pincode || ''}`.trim(),
+          addressLine1: customer.address_line_1 || '',
+          vehicleNumber: customer.vehicle_number || '',
           city: customer.city || '',
           state: customer.state || '',
           pincode: customer.pincode || '',
@@ -516,6 +605,8 @@ const POSBillingSystem = () => {
     alternatePhone: customer.alternate_number || '',
     email: customer.email || '',
     address: customer.address_line_1 || '',
+    addressLine1: customer.address_line_1 || '',
+    vehicleNumber: customer.vehicle_number || '',
     city: customer.city || '',
     state: customer.state || '',
     pincode: customer.pincode || '',
@@ -528,86 +619,55 @@ const POSBillingSystem = () => {
     price_category: customer.price_category || 'Retail'
   });
 
-  // Create Walk-in Customer if it doesn't exist; returns mapped customer or null
-  const ensureWalkInCustomer = async () => {
-    try {
-      const response = await customerService.getCustomers({
-        searchTerm: WALK_IN_CUSTOMER_NAME,
-        sortKey: 'customer_name',
-        sortDirection: 'ASC',
-        page: 1,
-        limit: 10,
-        status: 'Active'
-      });
-
-      const existing = response.success
-        ? response.data.find(customer => customer.customer_name === WALK_IN_CUSTOMER_NAME)
-        : null;
-
-      if (existing) {
-        return mapCustomerFromApi(existing);
-      }
-
-      const walkInData = {
-        customer_name: WALK_IN_CUSTOMER_NAME,
-        customer_code: 'WALK-IN',
-        mobile_number: '0000000000',
-        customer_type: 'Retail',
-        customer_status: 'Active',
-        email: '',
-        address_line_1: '',
-        city: '',
-        state: '',
-        pincode: '',
-        opening_balance: 0,
-        credit_limit: 0
-      };
-
-      const createResponse = await customerService.createCustomer(walkInData);
-      if (!createResponse.success) {
-        return null;
-      }
-
-      const refetch = await customerService.getCustomers({
-        searchTerm: WALK_IN_CUSTOMER_NAME,
-        sortKey: 'customer_name',
-        sortDirection: 'ASC',
-        page: 1,
-        limit: 10,
-        status: 'Active'
-      });
-      const created = refetch.success
-        ? refetch.data.find(customer => customer.customer_name === WALK_IN_CUSTOMER_NAME)
-        : null;
-      return created ? mapCustomerFromApi(created) : null;
-    } catch (error) {
-      console.error('Error ensuring Walk-in Customer:', error);
-      return null;
-    }
-  };
-
   const resolveOrderCustomer = async () => {
     if (activeTab.selectedCustomer?.id) {
       return activeTab.selectedCustomer;
     }
 
-    const walkInFromList = customers.find(c => c.name === WALK_IN_CUSTOMER_NAME);
-    if (walkInFromList?.id) {
-      return walkInFromList;
+    // Manually typed customer details - save them as a new customer.
+    // Returns false (after showing the reason) when the customer could not be created.
+    if (hasManualCustomerDetails) {
+      const customerPayload = {
+        customer_name: manualCustomerForm.customer_name.trim(),
+        mobile_number: manualCustomerForm.mobile_number.trim(),
+        gstin: manualCustomerForm.gstin.trim().toUpperCase(),
+        state: manualCustomerForm.state,
+        vehicle_number: manualCustomerForm.vehicle_number.trim().toUpperCase(),
+        address_line_1: manualCustomerForm.address_line_1.trim(),
+        pincode: manualCustomerForm.pincode.trim(),
+        city: '',
+        country: 'India',
+        customer_type: 'Retail',
+        customer_status: 'Active',
+        billing_type: 'B2C',
+        price_category: 'Retail Price',
+        balance_type: 'Receivable',
+        payment_terms: 'Cash',
+        payment_method: 'Cash',
+        price_level: 'Retail'
+      };
+
+      try {
+        const createResponse = await customerService.createCustomer(customerPayload);
+        const createdCustomer = mapCustomerFromApi({ id: createResponse.customerId, ...customerPayload });
+        updateActiveTab({ selectedCustomer: createdCustomer, customerForm: null });
+        fetchCustomers();
+        return createdCustomer;
+      } catch (error) {
+        toast.error('Could not save customer', {
+          description: error.message,
+          duration: 5000
+        });
+        return false;
+      }
     }
 
-    const ensured = await ensureWalkInCustomer();
-    if (ensured?.id) {
-      await fetchCustomers();
-      return ensured;
-    }
-
-    return defaultWalkInCustomer;
+    toast.error('Please select a customer or enter customer details before saving the bill.');
+    return false;
   };
 
   useEffect(() => {
     const initializeData = async () => {
-      await ensureWalkInCustomer();
       await fetchCustomers();
     };
     initializeData();
@@ -667,22 +727,23 @@ const POSBillingSystem = () => {
   // Add a manually entered line item to the bill (replaces the old
   // catalog-driven addItemToBill; there is no live product master anymore).
   const addManualItemToBill = () => {
+    const nextIndex = activeTab.billItems.length + 1;
     const name = (newItemForm.name || '').trim();
     if (!name) {
-      toast.error(t('sales.pos.validation.itemNameRequired'));
+      toast.error(t('sales.pos.validation.itemNameRequired', { index: nextIndex }));
       itemNameInputRef.current?.focus();
       return;
     }
 
     const qty = parseFloat(newItemForm.qty);
     if (!qty || qty <= 0) {
-      toast.error(t('sales.pos.validation.invalidQty', { index: 1 }));
+      toast.error(t('sales.pos.validation.invalidQty', { index: nextIndex }));
       return;
     }
 
     const price = parseFloat(newItemForm.price);
     if (isNaN(price) || price < 0) {
-      toast.error(t('sales.pos.validation.invalidPrice', { index: 1 }));
+      toast.error(t('sales.pos.validation.invalidPrice', { index: nextIndex }));
       return;
     }
 
@@ -724,6 +785,154 @@ const POSBillingSystem = () => {
       itemNameInputRef.current?.focus();
     }, 100);
   };
+
+  // Bill item table rows work like a spreadsheet: rows are positional, enough rows to
+  // fill the screen (billFitRows) are always shown, and typing into a blank row creates it.
+  // Row amount = Quantity × Price + Labour Charge. The stored unit price is derived
+  // from that so every existing total (subtotal, payment, saved order) keeps using price × qty.
+
+  const isBlankLine = (item) =>
+    !item ||
+    (!String(item.name || '').trim() &&
+      !String(item.hsnCode || '').trim() &&
+      !(Number(item.qty) > 0) &&
+      !(Number(item.rate) > 0) &&
+      !(Number(item.labourCharge) > 0));
+
+  const getLineAmount = (item) =>
+    (Number(item.qty) || 0) * (Number(item.rate) || 0) + (Number(item.labourCharge) || 0);
+
+  const withDerivedPrice = (item) => {
+    const qty = Number(item.qty) || 0;
+    return { ...item, price: qty > 0 ? getLineAmount(item) / qty : 0 };
+  };
+
+  const createBlankLine = () => ({
+    id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: '',
+    code: '',
+    hsnCode: '',
+    category: '',
+    unit: 'Piece',
+    qty: 0,
+    rate: 0,
+    labourCharge: 0,
+    price: 0,
+    mrp: 0,
+    discount: 0,
+    tax: 0
+  });
+
+  // Every new bill starts with a "Labour Charge" line at S.No 1. Left at price 0,
+  // it is not billed or saved (see filledBillItems); enter a price to charge it.
+  const LABOUR_CHARGE_NAME = 'Labour Charge';
+
+  const createLabourChargeLine = () => ({ ...createBlankLine(), name: LABOUR_CHARGE_NAME, qty: 1 });
+
+  const isUnusedLabourChargeLine = (item) =>
+    String(item.name || '').trim() === LABOUR_CHARGE_NAME && !(Number(item.rate) > 0);
+
+  // Rows that actually have something in them - only these are validated, billed and saved
+  const getBilledItems = (items) =>
+    items.filter(item => !isBlankLine(item) && !isUnusedLabourChargeLine(item));
+
+  useEffect(() => {
+    // Existing orders keep the items they were saved with
+    if (id) return;
+    if (activeTab.billItems.length === 0) {
+      updateActiveTab({ billItems: [createLabourChargeLine()] });
+    }
+  }, [id, activeTabId, activeTab.billItems.length]);
+
+  const updateBillRow = (rowIndex, changes) => {
+    const rows = [...activeTab.billItems];
+    while (rows.length <= rowIndex) {
+      rows.push(createBlankLine());
+    }
+
+    const current = rows[rowIndex];
+    const updated = { ...current, ...changes };
+    // A new row starts at quantity 1 as soon as something is typed into it
+    if (isBlankLine(current) && !('qty' in changes) && !(Number(current.qty) > 0)) {
+      updated.qty = 1;
+    }
+    rows[rowIndex] = withDerivedPrice(updated);
+
+    // Drop blank rows at the end - the table pads itself back to the minimum
+    while (rows.length > 0 && isBlankLine(rows[rows.length - 1])) {
+      rows.pop();
+    }
+    updateActiveTab({ billItems: rows });
+  };
+
+  // Quantity / Price cells are plain text inputs so every editing key works
+  // (Backspace, Delete, Home/End, Ctrl+A/C/V/Z, caret movement). Only digits and
+  // one decimal point are kept; the typed text is shown as-is while editing.
+  const handleBillNumberChange = (rowIndex, column, rawText) => {
+    const [whole, ...decimals] = rawText.replace(/[^0-9.]/g, '').split('.');
+    const text = decimals.length ? `${whole}.${decimals.join('')}` : whole;
+    setBillCellDraft({ row: rowIndex, col: column, text });
+    const value = parseFloat(text) || 0;
+    updateBillRow(rowIndex, column === 'qty' ? { qty: value } : { rate: value });
+  };
+
+  const removeBillRow = (rowIndex) => {
+    updateActiveTab({
+      billItems: activeTab.billItems.filter((_, index) => index !== rowIndex)
+    });
+  };
+
+  // Spreadsheet-style keyboard navigation between bill table cells:
+  // ENTER / ↓ next row, ↑ previous row, ← / → previous / next column.
+  // In text cells ← / → only leave the cell when the caret is at the start / end.
+  const BILL_COLUMNS = ['name', 'hsn', 'unit', 'qty', 'price'];
+
+  // Suggestions for the Unit cell; any other unit can still be typed
+  const UNIT_OPTIONS = ['Piece', 'Nos', 'Set', 'Box', 'Pair', 'Kg', 'Gram', 'Litre', 'Meter', 'Feet', 'Roll', 'Bag', 'Hour', 'Job'];
+
+  const focusBillCell = (rowIndex, column) => {
+    const cell = document.querySelector(`[data-bill-row="${rowIndex}"][data-bill-col="${column}"]`);
+    if (cell) {
+      cell.focus();
+      cell.select?.();
+    }
+  };
+
+  const handleBillCellKeyDown = (e, rowIndex, column) => {
+    const colIndex = BILL_COLUMNS.indexOf(column);
+    const input = e.target;
+    // A fully selected cell (as after moving into it) moves straight away
+    const { selectionStart: start, selectionEnd: end, value } = input;
+    const allSelected = start === 0 && end === value.length;
+    const caretAtStart = start == null || allSelected || (start === 0 && end === 0);
+    const caretAtEnd = start == null || allSelected || (start === value.length && end === value.length);
+
+    switch (e.key) {
+      case 'Enter':
+      case 'ArrowDown':
+        e.preventDefault();
+        focusBillCell(rowIndex + 1, column);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (rowIndex > 0) focusBillCell(rowIndex - 1, column);
+        break;
+      case 'ArrowLeft':
+        if (!caretAtStart || colIndex <= 0) return;
+        e.preventDefault();
+        focusBillCell(rowIndex, BILL_COLUMNS[colIndex - 1]);
+        break;
+      case 'ArrowRight':
+        if (!caretAtEnd || colIndex >= BILL_COLUMNS.length - 1) return;
+        e.preventDefault();
+        focusBillCell(rowIndex, BILL_COLUMNS[colIndex + 1]);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const filledBillItems = getBilledItems(activeTab.billItems);
 
   // Helper function to highlight and scroll to updated item
   const highlightAndScrollToItem = (itemId) => {
@@ -789,51 +998,28 @@ const POSBillingSystem = () => {
     }
   };
 
+  // GST base for a row = Quantity × Price + Labour Charge (the derived unit price
+  // already includes the labour charge). The "Labour Charge" line is taxed too.
+  const getGstBase = (item) => {
+    const base = (Number(item.price) || 0) * (Number(item.qty) || 0);
+    return base - (base * (Number(item.discount) || 0)) / 100;
+  };
+
   // Calculate tax amounts for an item
   const calculateItemTaxAmounts = (item) => {
-    const basePrice = item.price * item.qty;
-    const discountAmount = (basePrice * item.discount) / 100;
-    const priceAfterDiscount = basePrice - discountAmount;
-    const taxRate = item.tax || 0;
-
-    let taxAmount = 0;
-    let sgstAmount = 0;
-    let cgstAmount = 0;
-    let igstAmount = 0;
-    let sgstPercentage = 0;
-    let cgstPercentage = 0;
-    let igstPercentage = 0;
-
-    if (taxSettings.enableTax && taxRate > 0) {
-      if (taxSettings.taxIncludedInPrice) {
-        // Extract tax from the price (reverse calculation)
-        const taxableAmount = priceAfterDiscount / (1 + taxRate / 100);
-        taxAmount = priceAfterDiscount - taxableAmount;
-      } else {
-        // Tax is added on top
-        taxAmount = (priceAfterDiscount * taxRate) / 100;
-      }
-
-      if (taxSettings.taxType === 'SGST') {
-        sgstAmount = taxAmount / 2;
-        cgstAmount = taxAmount / 2;
-        sgstPercentage = taxRate / 2;
-        cgstPercentage = taxRate / 2;
-      } else {
-        igstAmount = taxAmount;
-        igstPercentage = taxRate;
-      }
-    }
+    const taxRate = GST_RATE;
+    const taxAmount = (getGstBase(item) * taxRate) / 100;
+    const isIgst = taxSettings.taxType === 'IGST';
 
     return {
       taxAmount,
       taxPercentage: taxRate,
-      sgstAmount,
-      cgstAmount,
-      igstAmount,
-      sgstPercentage,
-      cgstPercentage,
-      igstPercentage
+      sgstAmount: isIgst ? 0 : taxAmount / 2,
+      cgstAmount: isIgst ? 0 : taxAmount / 2,
+      igstAmount: isIgst ? taxAmount : 0,
+      sgstPercentage: isIgst ? 0 : taxRate / 2,
+      cgstPercentage: isIgst ? 0 : taxRate / 2,
+      igstPercentage: isIgst ? taxRate : 0
     };
   };
 
@@ -889,45 +1075,12 @@ const POSBillingSystem = () => {
     let totalCGST = 0;
     let totalIGST = 0;
 
-    activeTab.billItems.forEach((item) => {
-      const basePrice = item.price * item.qty;
-      const discountAmount = (basePrice * item.discount) / 100;
-      const priceAfterDiscount = basePrice - discountAmount;
-
-      if (taxSettings.enableTax) {
-        const taxRate = item.tax || 0;
-
-        if (taxSettings.taxIncludedInPrice) {
-          // Extract tax from the price (reverse calculation)
-          // If price includes tax: taxableAmount = price / (1 + taxRate/100)
-          const taxableAmount = priceAfterDiscount / (1 + taxRate / 100);
-          const taxAmount = priceAfterDiscount - taxableAmount;
-
-          totalTaxableAmount += taxableAmount;
-
-          if (taxSettings.taxType === 'SGST') {
-            totalSGST += taxAmount / 2;
-            totalCGST += taxAmount / 2;
-          } else {
-            totalIGST += taxAmount;
-          }
-        } else {
-          // Tax is added on top
-          totalTaxableAmount += priceAfterDiscount;
-
-          if (taxSettings.taxType === 'SGST') {
-            const sgst = (priceAfterDiscount * taxRate) / 200;
-            const cgst = (priceAfterDiscount * taxRate) / 200;
-            totalSGST += sgst;
-            totalCGST += cgst;
-          } else {
-            const igst = (priceAfterDiscount * taxRate) / 100;
-            totalIGST += igst;
-          }
-        }
-      } else {
-        totalTaxableAmount += priceAfterDiscount;
-      }
+    filledBillItems.forEach((item) => {
+      const itemTax = calculateItemTaxAmounts(item);
+      totalTaxableAmount += getGstBase(item);
+      totalSGST += itemTax.sgstAmount;
+      totalCGST += itemTax.cgstAmount;
+      totalIGST += itemTax.igstAmount;
     });
 
     return {
@@ -944,6 +1097,7 @@ const POSBillingSystem = () => {
 
   // Calculate amount before tax (subtotal after item discounts)
   const amountBeforeTax = activeTab.billItems.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+
 
   // Calculate tax breakdown
   const taxBreakdown = calculateTaxBreakdown();
@@ -971,7 +1125,7 @@ const POSBillingSystem = () => {
   const grandTotal = roundedTotal;
 
   const handlePayment = () => {
-    if (activeTab.billItems.length === 0) return;
+    if (filledBillItems.length === 0) return;
   };
 
   // Comprehensive order validation
@@ -979,24 +1133,48 @@ const POSBillingSystem = () => {
     const errors = [];
 
     // Check if there are items in the bill
-    if (!activeTab.billItems || activeTab.billItems.length === 0) {
+    if (filledBillItems.length === 0) {
       errors.push(t('sales.pos.validation.noItems'));
     }
 
     // Validate customer selection
-    // if (!activeTab.selectedCustomer || !activeTab.selectedCustomer.id) {
-    //   errors.push(t('sales.pos.validation.selectCustomer'));
-    // }
+    // A customer is mandatory: pick an existing one or fill in the details of a new one
+    if (!hasSelectedCustomer && !hasManualCustomerDetails) {
+      errors.push('Customer is required. Select a customer or enter customer details.');
+    }
+
+    // Manually typed customer (no existing customer selected) needs the same
+    // required fields as the Add Customer form
+    if (hasManualCustomerDetails) {
+      if (!manualCustomerForm.customer_name.trim()) errors.push('Customer name is required.');
+      if (!manualCustomerForm.mobile_number.trim()) errors.push('Mobile number is required.');
+      if (!manualCustomerForm.state) errors.push('State is required.');
+      if (!manualCustomerForm.vehicle_number.trim()) errors.push('Vehicle number is required.');
+      if (manualCustomerForm.pincode.trim() && !/^\d{6}$/.test(manualCustomerForm.pincode.trim())) {
+        errors.push('Pincode must be 6 digits.');
+      }
+    }
+
+    // A selected customer's details can be edited for this bill - keep the required ones filled
+    if (hasSelectedCustomer) {
+      const text = (value) => String(value || '').trim();
+      if (!text(customerFormValues.customer_name)) errors.push('Customer name is required.');
+      if (!customerFormValues.state) errors.push('State is required.');
+      if (!text(customerFormValues.vehicle_number)) errors.push('Vehicle number is required.');
+      if (text(customerFormValues.pincode) && !/^\d{6}$/.test(text(customerFormValues.pincode))) {
+        errors.push('Pincode must be 6 digits.');
+      }
+    }
 
     // Validate each item (manual free-text entry - just needs a name, positive qty and non-negative price)
-    activeTab.billItems.forEach((item, index) => {
+    filledBillItems.forEach((item, index) => {
       if (!item.name || !item.name.trim()) {
         errors.push(t('sales.pos.validation.itemNameRequired', { index: index + 1 }));
       }
       if (!item.qty || item.qty <= 0) {
         errors.push(t('sales.pos.validation.invalidQty', { index: index + 1 }));
       }
-      if (item.price === undefined || item.price === null || item.price < 0) {
+      if (!(item.price > 0)) {
         errors.push(t('sales.pos.validation.invalidPrice', { index: index + 1 }));
       }
     });
@@ -1056,7 +1234,7 @@ const POSBillingSystem = () => {
       paymentStatus = effectivePaidAmount > 0 ? 'partial' : 'pending';
     }
 
-    const finalCustomer = resolvedCustomer || defaultWalkInCustomer;
+    const finalCustomer = resolvedCustomer;
     const validCustomerId = finalCustomer?.id && Number(finalCustomer.id) > 0 ? finalCustomer.id : null;
 
     return {
@@ -1096,7 +1274,7 @@ const POSBillingSystem = () => {
       },
 
       // === ORDER ITEMS (free-text line items, no product master) ===
-      items: activeTab.billItems.map((item, index) => {
+      items: filledBillItems.map((item, index) => {
         const itemTaxAmounts = calculateItemTaxAmounts(item);
         return {
           // Basic item information (manually entered, not linked to a product record)
@@ -1106,6 +1284,7 @@ const POSBillingSystem = () => {
           category: item.category || '',
           unit: item.unit || 'Piece',
           hsnCode: item.hsnCode || '',
+          labourCharge: Number(item.labourCharge) || 0,
 
           // Pricing and quantity
           quantity: item.qty,
@@ -1117,7 +1296,7 @@ const POSBillingSystem = () => {
           itemDiscountAmount: (item.price * item.qty * (item.discount || 0)) / 100,
 
           // Tax information
-          taxRate: item.tax || 0,
+          taxRate: itemTaxAmounts.taxPercentage,
           sgstRate: itemTaxAmounts.sgstPercentage,
           cgstRate: itemTaxAmounts.cgstPercentage,
           igstRate: itemTaxAmounts.igstPercentage,
@@ -1136,8 +1315,8 @@ const POSBillingSystem = () => {
       // === FINANCIAL CALCULATIONS ===
       calculations: {
         // Subtotals
-        itemCount: activeTab.billItems.length,
-        totalQuantity: activeTab.billItems.reduce((sum, item) => sum + item.qty, 0),
+        itemCount: filledBillItems.length,
+        totalQuantity: filledBillItems.reduce((sum, item) => sum + item.qty, 0),
         subtotal: subtotal, // Sum of all (qty × rate)
         grossAmount: subtotal, // Same as subtotal
 
@@ -1299,6 +1478,7 @@ const POSBillingSystem = () => {
 
 
       const resolvedCustomer = await resolveOrderCustomer();
+      if (resolvedCustomer === false) return;
       const orderData = createOrderData(resolvedCustomer);
 
       // If editing, add the ID to the order data
@@ -1394,6 +1574,7 @@ const POSBillingSystem = () => {
       }
 
       const resolvedCustomer = await resolveOrderCustomer();
+      if (resolvedCustomer === false) return;
       const orderData = createOrderData(resolvedCustomer);
 
       // If editing, add the ID to the order data
@@ -1612,6 +1793,7 @@ const POSBillingSystem = () => {
         ...tab,
         billItems: [],
         selectedCustomer: null,
+        customerForm: null,
         billDiscount: 0,
         discountType: 'flat',
         loyaltyPointsUsed: 0,
@@ -1647,7 +1829,7 @@ const POSBillingSystem = () => {
       console.error('Error saving tabs to storage:', error);
     }
 
-    setSearchQuery('');
+    setNewItemForm(getDefaultNewItemForm());
     if (showToast) {
       toast.info(t('sales.pos.billCleared'));
     }
@@ -1725,13 +1907,11 @@ const POSBillingSystem = () => {
         return;
       }
 
-      // F2 = Focus the manual item name input to add a new line item
+      // F2 = Focus the Item Description of the first empty bill row
       if (e.key === 'F2') {
         e.preventDefault();
-        if (itemNameInputRef.current) {
-          itemNameInputRef.current.focus();
-          itemNameInputRef.current.select();
-        }
+        const emptyCell = Array.from(document.querySelectorAll('[data-bill-col="name"]')).find(input => !input.value);
+        emptyCell?.focus();
         return;
       }
 
@@ -1842,7 +2022,7 @@ const POSBillingSystem = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [grandTotal, activeTabId, activeTab.paymentType]);
+  }, [grandTotal, activeTabId, activeTab.paymentType, newItemForm]);
 
   const bgClass = 'bg-gray-50';
   const cardBg = 'bg-white';
@@ -2046,7 +2226,7 @@ const POSBillingSystem = () => {
                 <ShoppingCart size={16} />
                 <span className="font-medium text-sm whitespace-nowrap">
                   {tab.name}
-                  {tab.billItems.length > 0 && ` (${tab.billItems.length})`}
+                  {getBilledItems(tab.billItems).length > 0 && ` (${getBilledItems(tab.billItems).length})`}
                 </span>
                 {tabs.length > 1 && (
                   <button
@@ -2113,482 +2293,16 @@ const POSBillingSystem = () => {
           <div className="flex-1 flex gap-2 overflow-hidden px-2 py-1">
             {/* Left Section - Bill Items */}
             <div className="flex-1 flex flex-col overflow-hidden relative">
-              {/* Manual Item Entry - free-text line item form (no product catalog) */}
-              <div className={`relative pb-1 ${cardBg} border ${borderColor} rounded-lg p-2 mb-1`}>
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="flex-1 min-w-[160px]">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.manualItem.name')} *
-                    </label>
-                    <input
-                      ref={itemNameInputRef}
-                      type="text"
-                      placeholder={t('sales.pos.manualItem.namePlaceholder')}
-                      className={`w-full px-3 py-2 border-2 ${borderColor} ${cardBg} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 rounded text-sm`}
-                      value={newItemForm.name}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, name: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="w-20">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.table.qty')}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      className="w-full px-2 py-2 border-2 border-gray-200 rounded text-sm text-right"
-                      value={newItemForm.qty}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, qty: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="w-24">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.manualItem.unitPrice')}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-full px-2 py-2 border-2 border-gray-200 rounded text-sm text-right"
-                      value={newItemForm.price}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, price: e.target.value }))}
-                    />
-                  </div>
-
-                  <button
-                    onClick={addManualItemToBill}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-1 whitespace-nowrap shadow-sm"
-                    title={t('sales.pos.manualItem.addItem')}
-                  >
-                    <Plus size={16} />
-                    {t('sales.pos.manualItem.addItem')}
-                    <kbd className="ml-1 text-[10px] bg-green-700 px-1.5 py-0.5 rounded">F2</kbd>
-                  </button>
-                </div>
-
-                {/* Optional secondary fields */}
-                <div className="flex flex-wrap items-end gap-2 mt-2">
-                  <div className="w-28">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.table.hsn')}
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
-                      value={newItemForm.hsnCode}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, hsnCode: e.target.value }))}
-                    />
-                  </div>
-                  <div className="w-32">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.manualItem.category')}
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
-                      value={newItemForm.category}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, category: e.target.value }))}
-                    />
-                  </div>
-                  <div className="w-24">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.table.unit')}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Piece"
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
-                      value={newItemForm.unit}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, unit: e.target.value }))}
-                    />
-                  </div>
-                  <div className="w-20">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.table.mrp')}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-right"
-                      value={newItemForm.mrp}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, mrp: e.target.value }))}
-                    />
-                  </div>
-                  <div className="w-20">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.manualItem.taxRate')}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-right"
-                      value={newItemForm.tax}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, tax: e.target.value }))}
-                    />
-                  </div>
-                  <div className="w-20">
-                    <label className="block text-[10px] font-semibold text-gray-600 mb-0.5">
-                      {t('sales.pos.table.disc')}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs text-right"
-                      value={newItemForm.discount}
-                      onChange={(e) => setNewItemForm(prev => ({ ...prev, discount: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </div>
-              {/* Bill Items */}
-              <div className={`${cardBg}  shadow-sm border ${borderColor} p-2 flex-1 flex flex-col overflow-hidden relative`}>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
-                  {/* Left: title + add */}
-                  <h3 className="text-xs font-semibold text-gray-700 flex items-center gap-1 shrink-0">
-                    <span>📋</span>{t('sales.pos.billItems.title')} ({activeTab.billItems.length})
-                  </h3>
-
-                  <div className="flex-1" />
-
-                  {/* Price Level - a label only; manually entered prices are used as typed */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[10px] font-medium text-gray-700">Price:</span>
-                    <select
-                      value={activeTab.priceLevel || 'Retail'}
-                      onChange={(e) => updateActiveTab({ priceLevel: e.target.value })}
-                      className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:border-blue-500"
-                    >
-                      <option value="Retail">Retail</option>
-                      <option value="Wholesale">Wholesale</option>
-                      <option value="Dealer">Dealer</option>
-                    </select>
-                  </div>
-
-                  {/* Divider */}
-                  <span className="h-4 w-px bg-gray-300 shrink-0" />
-
-                  {/* Tax */}
-                  <div className="flex items-center gap-1 shrink-0 flex-wrap">
-                    <label className="flex items-center gap-1 text-[10px] cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={taxSettings.enableTax}
-                        onChange={(e) => updateActiveTab({ taxSettings: { ...taxSettings, enableTax: e.target.checked } })}
-                        className="w-3 h-3 text-blue-600 rounded"
-                      />
-                      <span className="font-medium text-gray-700">{t('sales.pos.billItems.tax')}</span>
-                    </label>
-
-                    {taxSettings.enableTax && (
-                      <>
-                        <label className="flex items-center gap-1 text-[10px] cursor-pointer">
-                          <input
-                            type="radio"
-                            name="taxType"
-                            value="SGST"
-                            checked={taxSettings.taxType === 'SGST'}
-                            onChange={(e) => updateActiveTab({ taxSettings: { ...taxSettings, taxType: e.target.value } })}
-                            className="w-3 h-3"
-                          />
-                          <span className="text-gray-600">{t('sales.pos.billItems.sgstCgst')}</span>
-                        </label>
-                        <label className="flex items-center gap-1 text-[10px] cursor-pointer">
-                          <input
-                            type="radio"
-                            name="taxType"
-                            value="IGST"
-                            checked={taxSettings.taxType === 'IGST'}
-                            onChange={(e) => updateActiveTab({ taxSettings: { ...taxSettings, taxType: e.target.value } })}
-                            className="w-3 h-3"
-                          />
-                          <span className="text-gray-600">{t('sales.pos.billItems.igst')}</span>
-                        </label>
-                        <label className="flex items-center gap-1 text-[10px] cursor-pointer border-l border-gray-300 pl-1">
-                          <input
-                            type="checkbox"
-                            checked={taxSettings.taxIncludedInPrice}
-                            onChange={(e) => updateActiveTab({ taxSettings: { ...taxSettings, taxIncludedInPrice: e.target.checked } })}
-                            className="w-3 h-3 text-blue-600 rounded"
-                          />
-                          <span className="text-gray-600">{t('sales.pos.billItems.incPrice')}</span>
-                        </label>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Clear All */}
-                  {activeTab.billItems.length > 0 && (
-                    <>
-                      <span className="h-4 w-px bg-gray-300 shrink-0" />
-                      <button
-                        onClick={clearAll}
-                        className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-[10px] font-medium shrink-0"
-                      >
-                        <Trash2 size={13} /> {t('sales.pos.billItems.clearAll')}
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {activeTab.billItems.length === 0 ? (
-                  <div className="text-center h-[calc(100vh-200px)] py-16">
-                    <ShoppingCart className="mx-auto text-gray-400 mb-4" size={64} />
-                    <p className={`${textSecondary} mb-2`}>{t('sales.pos.billItems.noItemsAdded')}</p>
-                    <p className={`text-sm ${textSecondary}`}>{t('sales.pos.billItems.pressCtrlP')}</p>
-                  </div>
-                ) : (
-                  <div ref={billItemsContainerRef} className="overflow-y-auto border border-gray-300 flex-1">
-                    <table className="w-full border-collapse table-fixed">
-                      <colgroup>
-                        <col style={{ width: '4%' }} />
-                        <col style={{ width: taxSettings.enableTax ? '25%' : '28%' }} />
-                        <col style={{ width: '7%' }} />
-                        <col style={{ width: taxSettings.enableTax ? '12%' : '14%' }} />
-                        <col style={{ width: '6%' }} />
-                        <col style={{ width: '8%' }} />
-                        <col style={{ width: '10%' }} />
-                        <col style={{ width: '7%' }} />
-                        {taxSettings.enableTax && <col style={{ width: '8%' }} />}
-                        <col style={{ width: '9%' }} />
-                        <col style={{ width: '5%' }} />
-                      </colgroup>
-                      <thead className="sticky top-0 z-10">
-                        <tr className="bg-gray-100">
-                          <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">#</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-left text-xs font-semibold bg-gray-100">{t('sales.pos.table.product')}</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">{t('sales.pos.table.hsn')}</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">{t('sales.pos.table.qty')}</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">{t('sales.pos.table.unit')}</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">{t('sales.pos.table.mrp')}</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">{t('sales.pos.table.rate')}</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">{t('sales.pos.table.disc')}</th>
-                          {taxSettings.enableTax && (
-                            <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">GST</th>
-                          )}
-                          <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">{t('sales.pos.table.amount')}</th>
-                          <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">{t('sales.pos.table.action')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeTab.billItems.map((item, index) => (
-                          <tr
-                            key={item.id}
-                            ref={item.id === lastUpdatedItemId ? lastUpdatedItemRef : null}
-                            className={`transition-all duration-500 ${item.id === lastUpdatedItemId
-                              ? 'bg-gradient-to-r from-green-100 to-green-50'
-                              : 'hover:bg-gray-50'
-                              }`}
-                          >
-                            <td className="border border-gray-300 px-1 py-1.5 text-sm text-center">{index + 1}</td>
-                            <td className="border border-gray-300 px-2 py-1.5">
-                              <div className="min-w-0 flex flex-col gap-0.5">
-                                <input
-                                  type="text"
-                                  value={item.name}
-                                  onChange={(e) => updateActiveTab({
-                                    billItems: activeTab.billItems.map(i =>
-                                      i.id === item.id ? { ...i, name: e.target.value } : i
-                                    )
-                                  })}
-                                  className="w-full px-1 py-0.5 text-sm font-medium border border-transparent hover:border-gray-300 focus:border-gray-300 rounded"
-                                  placeholder={t('sales.pos.manualItem.namePlaceholder')}
-                                />
-                                <input
-                                  type="text"
-                                  value={item.category || ''}
-                                  onChange={(e) => updateActiveTab({
-                                    billItems: activeTab.billItems.map(i =>
-                                      i.id === item.id ? { ...i, category: e.target.value } : i
-                                    )
-                                  })}
-                                  className={`w-full px-1 py-0.5 text-xs ${textSecondary} border border-transparent hover:border-gray-300 focus:border-gray-300 rounded`}
-                                  placeholder={t('sales.pos.manualItem.category')}
-                                />
-                              </div>
-                            </td>
-                            <td className="border border-gray-300 px-1 py-1.5">
-                              <input
-                                type="text"
-                                value={item.hsnCode || ''}
-                                onChange={(e) => updateActiveTab({
-                                  billItems: activeTab.billItems.map(i =>
-                                    i.id === item.id ? { ...i, hsnCode: e.target.value } : i
-                                  )
-                                })}
-                                className="w-full px-1 py-0.5 text-center text-sm border border-gray-300 rounded"
-                              />
-                            </td>
-                            <td className="border border-gray-300 px-1 py-1.5">
-                              <div className="flex items-center justify-center gap-0.5">
-                                <button
-                                  onClick={() => updateQuantity(item.id, -1)}
-                                  className="w-6 h-6 rounded border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-sm font-bold flex-shrink-0"
-                                >
-                                  −
-                                </button>
-                                <input
-                                  type="number"
-                                  value={item.qty}
-                                  onChange={(e) => {
-                                    const newQty = parseFloat(e.target.value) || 0;
-                                    updateActiveTab({
-                                      billItems: activeTab.billItems.map(i =>
-                                        i.id === item.id ? { ...i, qty: Math.max(0, newQty) } : i
-                                      )
-                                    });
-                                    highlightAndScrollToItem(item.id);
-                                  }}
-                                  className="w-12 flex-1 min-w-[40px] px-1 py-0.5 text-center text-sm border border-gray-300 rounded"
-                                  step="0.001"
-                                />
-                                <button
-                                  onClick={() => updateQuantity(item.id, 1)}
-                                  className="w-6 h-6 rounded border border-gray-300 hover:bg-gray-100 flex items-center justify-center text-sm font-bold flex-shrink-0"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </td>
-                            <td className="border border-gray-300 px-1 py-1.5">
-                              <input
-                                type="text"
-                                value={item.unit || ''}
-                                onChange={(e) => updateActiveTab({
-                                  billItems: activeTab.billItems.map(i =>
-                                    i.id === item.id ? { ...i, unit: e.target.value } : i
-                                  )
-                                })}
-                                className="w-full px-1 py-0.5 text-center text-sm border border-gray-300 rounded"
-                              />
-                            </td>
-                            <td className="border border-gray-300 px-1 py-1.5">
-                              <input
-                                type="number"
-                                value={item.mrp || 0}
-                                onChange={(e) => updateActiveTab({
-                                  billItems: activeTab.billItems.map(i =>
-                                    i.id === item.id ? { ...i, mrp: Number(e.target.value) || 0 } : i
-                                  )
-                                })}
-                                className="w-full px-1 py-0.5 text-right text-sm border border-gray-300 rounded"
-                                min="0"
-                                step="0.01"
-                              />
-                            </td>
-                            <td className="border border-gray-300 px-1 py-1.5">
-                              <input
-                                type="number"
-                                value={item.price}
-                                onChange={(e) => updateActiveTab({
-                                  billItems: activeTab.billItems.map(i =>
-                                    i.id === item.id ? { ...i, price: Number(e.target.value) || 0 } : i
-                                  )
-                                })}
-                                className="w-full px-1 py-0.5 text-right text-sm border border-gray-300 rounded"
-                                min="0"
-                                step="0.01"
-                              />
-                            </td>
-                            <td className="border border-gray-300 px-1 py-1.5">
-                              <input
-                                type="number"
-                                value={item.discount}
-                                onChange={(e) => {
-                                  const newDiscount = Number(e.target.value) || 0;
-                                  const limitedDiscount = Math.min(Math.max(0, newDiscount), 100);
-                                  updateActiveTab({
-                                    billItems: activeTab.billItems.map(i =>
-                                      i.id === item.id ? { ...i, discount: limitedDiscount } : i
-                                    )
-                                  });
-                                }}
-                                className="w-full px-1 py-0.5 text-right text-sm border border-gray-300 rounded"
-                                min="0"
-                                max="100"
-                                step="0.01"
-                              />
-                            </td>
-                            {taxSettings.enableTax && (
-                              <td className="border border-gray-300 px-1 py-1.5 text-right text-sm">
-                                <div className="flex flex-col items-end gap-0.5">
-                                  <input
-                                    type="number"
-                                    value={item.tax || 0}
-                                    onChange={(e) => updateActiveTab({
-                                      billItems: activeTab.billItems.map(i =>
-                                        i.id === item.id ? { ...i, tax: Number(e.target.value) || 0 } : i
-                                      )
-                                    })}
-                                    className="w-14 px-1 py-0.5 text-right text-xs border border-gray-300 rounded"
-                                    min="0"
-                                    step="0.01"
-                                    title={t('sales.pos.manualItem.taxRate')}
-                                  />
-                                  <span className="text-[10px] text-gray-500">₹{calculateItemTaxAmounts(item).taxAmount.toFixed(2)}</span>
-                                </div>
-                              </td>
-                            )}
-                            <td className="border border-gray-300 px-1 py-1.5 text-right text-sm font-medium">
-                              ₹{calculateItemTotal(item).toFixed(2)}
-                            </td>
-                            <td className="border border-gray-300 px-1 py-1.5 text-center">
-                              <button
-                                onClick={() => removeItem(item.id)}
-                                className="text-gray-400 hover:text-gray-600"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="sticky bottom-0 bg-gray-200 font-bold">
-                        <tr>
-                          <td colSpan="3" className="border border-gray-300 px-1 py-1.5 text-xs text-right">Subtotal:</td>
-                          <td className="border border-gray-300 px-1 py-1.5 text-center text-xs">
-                            {activeTab.billItems.reduce((sum, item) => sum + item.qty, 0)}
-                          </td>
-                          <td className="border border-gray-300 px-1 py-1.5 text-xs"></td>
-                          <td className="border border-gray-300 px-1 py-1.5 text-xs"></td>
-                          <td className="border border-gray-300 px-1 py-1.5 text-xs"></td>
-                          <td className="border border-gray-300 px-1 py-1.5 text-xs"></td>
-                          {taxSettings.enableTax && (
-                            <td className="border border-gray-300 px-1 py-1.5 text-right text-xs">
-                              ₹{activeTab.billItems.reduce((sum, item) => sum + calculateItemTaxAmounts(item).taxAmount, 0).toFixed(2)}
-                            </td>
-                          )}
-                          <td className="border border-gray-300 px-1 py-1.5 text-right text-xs">
-                            ₹{activeTab.billItems.reduce((sum, item) => sum + calculateItemTotal(item), 0).toFixed(2)}
-                          </td>
-                          <td className="border border-gray-300 px-1 py-1.5 text-xs"></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-
-            </div>
-
-            {/* Right Section - Customer & Payment */}
-            <div className="w-100 flex flex-col overflow-y-auto space-y-3 pb-8">
-
               {/* Customer Information */}
-              <div className={`${cardBg} shadow-sm border ${borderColor} p-2`}>
-                <h3 className="font-semibold flex items-center gap-2 mb-1.5 text-sm">
+              <div className={`${cardBg} shadow-sm border ${borderColor} p-2 mb-1`}>
+                {/* Title on the left, search on the right; details grid below */}
+                <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold flex items-center gap-2 text-sm">
                   <User size={16} /> {t('sales.pos.rightPanel.customer')}
                 </h3>
-
                 {/* Customer Search Dropdown */}
-                <div className="relative mb-1.5">
+                <div className="relative w-full sm:w-96">
                   <div className="flex gap-1">
                     <div className="relative flex-1">
                       <Search className="absolute left-2 top-2.5 text-gray-400" size={16} />
@@ -2610,11 +2324,14 @@ const POSBillingSystem = () => {
                           }
                         }}
                         placeholder={t('sales.pos.rightPanel.searchCustomer')}
-                        className={`w-full pl-7 pr-7 py-1.5 text-sm rounded border-2 ${borderColor} ${cardBg} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                        className={`w-full pl-7 pr-7 py-1.5 text-sm rounded-md border border-gray-300 ${cardBg} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                       />
-                      {customerSearchQuery && (
+                      {(customerSearchQuery || hasSelectedCustomer) && (
                         <button
-                          onClick={() => setCustomerSearchQuery('')}
+                          onClick={() => {
+                            setCustomerSearchQuery('');
+                            if (hasSelectedCustomer) handleCustomerChange(null);
+                          }}
                           className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600 transition-colors"
                           title={t('sales.pos.rightPanel.clearSearch')}
                         >
@@ -2660,7 +2377,10 @@ const POSBillingSystem = () => {
                               className="px-2 py-1.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 text-xs"
                             >
                               <div className="font-medium text-gray-900">{customer.name}</div>
-                              <div className="text-gray-600 text-xs">📱 {customer.phone}</div>
+                              <div className="text-gray-600 text-xs">
+                                📱 {customer.phone}
+                                {customer.vehicleNumber && <span className="ml-2">🚗 {customer.vehicleNumber}</span>}
+                              </div>
                               <div className="text-yellow-600 text-xs font-semibold">{customer.points} {t('sales.pos.rightPanel.pts')}</div>
                             </div>
                           ))
@@ -2682,179 +2402,233 @@ const POSBillingSystem = () => {
                     </div>
                   )}
                 </div>
+                </div>
+
+                {/* Customer Details - filled from the selected customer, or typed manually for a new one */}
+                <div className="w-full grid grid-cols-2 lg:grid-cols-12 gap-x-3 gap-y-2 pt-2 border-t border-gray-200">
+                  {[
+                    // Row 1: required fields, 3 equal columns each
+                    { field: 'customer_name', label: t('customers.customerName'), required: true, placeholder: 'Enter customer name', span: 'lg:col-span-3' },
+                    { field: 'mobile_number', label: t('customers.mobileNumber'), required: true, placeholder: '10-digit mobile number', span: 'lg:col-span-3' },
+                    { field: 'vehicle_number', label: t('customers.vehicleNumber'), required: true, uppercase: true, placeholder: 'e.g. TN 38 AB 1234', span: 'lg:col-span-3' },
+                    { field: 'state', label: t('customers.state'), required: true, options: STATES, placeholder: 'Select state', span: 'lg:col-span-3' },
+                    // Row 2: optional fields; address is 6 columns so both rows share the same edges
+                    { field: 'gstin', label: t('customers.gstin'), uppercase: true, placeholder: '15-character GSTIN (optional)', span: 'lg:col-span-3' },
+                    { field: 'address_line_1', label: t('customers.addressLine1'), placeholder: 'Street, area, city (optional)', span: 'col-span-2 lg:col-span-6' },
+                    { field: 'pincode', label: t('customers.pincode'), maxLength: 6, placeholder: '6-digit pincode', span: 'lg:col-span-3' }
+                  ].map(({ field, label, required, uppercase, options, maxLength, span, placeholder }) => {
+                    // With a selected customer only the mobile number is locked (greyed out)
+                    const locked = hasSelectedCustomer && field === 'mobile_number';
+                    const fieldClass = `w-full px-2 py-1.5 text-sm rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${locked ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : cardBg} ${uppercase ? 'uppercase' : ''}`;
+                    return (
+                      <div key={field} className={span}>
+                        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">
+                          {label}
+                          {required && <span className="text-red-500"> *</span>}
+                        </label>
+                        {options ? (
+                          <select
+                            value={customerFormValues[field]}
+                            onChange={(e) => updateCustomerFormField(field, e.target.value)}
+                            disabled={locked}
+                            className={fieldClass}
+                          >
+                            <option value="">{placeholder}</option>
+                            {options.map(option => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={customerFormValues[field]}
+                            onChange={(e) => updateCustomerFormField(field, e.target.value)}
+                            readOnly={locked}
+                            maxLength={maxLength}
+                            placeholder={placeholder}
+                            className={fieldClass}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                </div>
+              </div>
+              {/* Bill Items */}
+              <div className={`${cardBg}  shadow-sm border ${borderColor} p-2 flex-1 flex flex-col overflow-hidden relative`}>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                  {/* Left: title + add */}
+                  <h3 className="text-xs font-semibold text-gray-700 flex items-center gap-1 shrink-0">
+                    <span>📋</span>{t('sales.pos.billItems.title')} ({filledBillItems.length})
+                  </h3>
+
+                  <div className="flex-1" />
+
+                  {/* Clear All */}
+                  {filledBillItems.length > 0 && (
+                    <>
+                      <span className="h-4 w-px bg-gray-300 shrink-0" />
+                      <button
+                        onClick={clearAll}
+                        className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-[10px] font-medium shrink-0"
+                      >
+                        <Trash2 size={13} /> {t('sales.pos.billItems.clearAll')}
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Bill item table - type straight into the rows; ENTER moves down to the next row */}
+                <div ref={billItemsContainerRef} className="overflow-y-auto border border-gray-300 flex-1">
+                  <table className="w-full border-collapse table-fixed">
+                    <colgroup>
+                      {/* Fixed narrow widths; Item Description takes all remaining space */}
+                      <col style={{ width: '44px' }} />
+                      <col />
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '80px' }} />
+                      <col style={{ width: '80px' }} />
+                      <col style={{ width: '100px' }} />
+                      <col style={{ width: '50px' }} />
+                    </colgroup>
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">S.No</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-left text-xs font-semibold bg-gray-100">Item Description</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">HSN Code</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Unit</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Quantity</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">Price</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: Math.max(billFitRows, activeTab.billItems.length + 1) }, (_, index) => {
+                        const item = activeTab.billItems[index];
+                        const blank = isBlankLine(item);
+                        // A row with anything typed in it needs a description, quantity and price
+                        const inUse = !!item && !blank && !isUnusedLabourChargeLine(item);
+                        const missing = {
+                          name: inUse && !String(item.name || '').trim(),
+                          qty: inUse && !(Number(item.qty) > 0),
+                          price: inUse && !(Number(item.rate) > 0)
+                        };
+                        const baseCellClass = 'w-full h-full px-1.5 py-1.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-2 focus:ring-inset';
+                        const cellClassFor = (col) => missing[col]
+                          ? `${baseCellClass} bg-red-50 ring-2 ring-inset ring-red-500 focus:ring-red-500`
+                          : `${baseCellClass} focus:ring-blue-500`;
+                        const cellClass = cellClassFor('none');
+                        // While a number cell is being edited, show exactly what was typed
+                        const draftFor = (col) =>
+                          billCellDraft && billCellDraft.row === index && billCellDraft.col === col ? billCellDraft.text : null;
+                        return (
+                          // The row holding the cursor is highlighted; clicking S.No jumps to its Item Description
+                          <tr key={index} style={billRowHeight ? { height: billRowHeight } : undefined} className="hover:bg-gray-50 focus-within:bg-blue-100 focus-within:hover:bg-blue-100">
+                            <td
+                              onClick={() => focusBillCell(index, 'name')}
+                              className="border border-gray-300 px-1 text-sm text-center text-gray-500 cursor-pointer select-none"
+                            >
+                              {index + 1}
+                            </td>
+                            <td className="border border-gray-300 p-0">
+                              <input
+                                type="text"
+                                data-bill-row={index}
+                                data-bill-col="name"
+                                value={item?.name || ''}
+                                onChange={(e) => updateBillRow(index, { name: e.target.value })}
+                                onKeyDown={(e) => handleBillCellKeyDown(e, index, 'name')}
+                                className={cellClassFor('name')}
+                              />
+                            </td>
+                            <td className="border border-gray-300 p-0">
+                              <input
+                                type="text"
+                                data-bill-row={index}
+                                data-bill-col="hsn"
+                                value={item?.hsnCode || ''}
+                                onChange={(e) => updateBillRow(index, { hsnCode: e.target.value })}
+                                onKeyDown={(e) => handleBillCellKeyDown(e, index, 'hsn')}
+                                className={`${cellClass} text-center`}
+                              />
+                            </td>
+                            <td className="border border-gray-300 p-0">
+                              <input
+                                type="text"
+                                list="bill-unit-options"
+                                data-bill-row={index}
+                                data-bill-col="unit"
+                                value={blank ? '' : (item?.unit || '')}
+                                onChange={(e) => updateBillRow(index, { unit: e.target.value })}
+                                onKeyDown={(e) => handleBillCellKeyDown(e, index, 'unit')}
+                                className={`${cellClass} text-center`}
+                              />
+                            </td>
+                            <td className="border border-gray-300 p-0">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                data-bill-row={index}
+                                data-bill-col="qty"
+                                value={draftFor('qty') ?? (blank ? '' : item.qty)}
+                                onChange={(e) => handleBillNumberChange(index, 'qty', e.target.value)}
+                                onBlur={() => setBillCellDraft(null)}
+                                onKeyDown={(e) => handleBillCellKeyDown(e, index, 'qty')}
+                                className={`${cellClassFor('qty')} text-center`}
+                              />
+                            </td>
+                            <td className="border border-gray-300 p-0">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                data-bill-row={index}
+                                data-bill-col="price"
+                                value={draftFor('price') ?? (item?.rate || '')}
+                                onChange={(e) => handleBillNumberChange(index, 'price', e.target.value)}
+                                onBlur={() => setBillCellDraft(null)}
+                                onKeyDown={(e) => handleBillCellKeyDown(e, index, 'price')}
+                                className={`${cellClassFor('price')} text-right`}
+                              />
+                            </td>
+                            <td className="border border-gray-300 px-1 text-center">
+                              {!blank && (
+                                <button
+                                  onClick={() => removeBillRow(index)}
+                                  className="text-gray-400 hover:text-red-600"
+                                  title="Remove row"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <datalist id="bill-unit-options">
+                    {UNIT_OPTIONS.map((unit) => (
+                      <option key={unit} value={unit} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
 
-              {/* Order Summary - Collapsible */}
+
+            </div>
+
+            {/* Right Section - Customer & Payment */}
+            <div className="w-100 flex flex-col overflow-y-auto space-y-3 pb-8">
+
+              {/* Order Summary - always shown in full */}
               <div className={`${cardBg} shadow-sm border ${borderColor} rounded-lg p-2`}>
-                {/* Header with Expand/Collapse Button */}
+                {/* Header */}
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold text-gray-700">{t('sales.pos.rightPanel.orderSummary')}</h4>
-                  <button
-                    onClick={() => setOrderSummaryExpanded(!orderSummaryExpanded)}
-                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
-                    title={orderSummaryExpanded ? t('sales.pos.rightPanel.collapse') : t('sales.pos.rightPanel.expand')}
-                  >
-                    {orderSummaryExpanded ? (
-                      <>
-                        <ChevronUp size={12} />
-                        <span>{t('sales.pos.rightPanel.collapse')}</span>
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown size={12} />
-                        <span>{t('sales.pos.rightPanel.expand')}</span>
-                      </>
-                    )}
-                  </button>
                 </div>
 
                 <div className="space-y-1">
-                  {!orderSummaryExpanded ? (
-                    /* COMPACT VIEW - Only Essential Details */
-                    <>
-                      {/* Before Tax */}
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700 text-xs font-medium">{t('sales.pos.rightPanel.beforeTax')}:</span>
-                        <span className="font-bold text-gray-900 text-sm">₹{amountBeforeTax.toFixed(2)}</span>
-                      </div>
-
-                      {/* Tax Amount */}
-                      {taxSettings.enableTax && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600 text-xs">{t('sales.pos.rightPanel.tax')} {taxSettings.taxType === 'SGST' ? t('sales.pos.billItems.sgstCgst') : t('sales.pos.billItems.igst')}:</span>
-                          <span className="font-semibold text-purple-700 text-sm">₹{taxAmount.toFixed(2)}</span>
-                        </div>
-                      )}
-
-                      {/* After Tax */}
-                      {taxSettings.enableTax && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-700 text-xs font-medium">{t('sales.pos.rightPanel.afterTax')}:</span>
-                          <span className="font-bold text-gray-900 text-sm">₹{amountAfterTax.toFixed(2)}</span>
-                        </div>
-                      )}
-
-                      {/* Round Off */}
-                      {Math.abs(roundOffAmount) > 0.01 && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600 text-xs">{t('sales.pos.rightPanel.roundOff')}:</span>
-                          <span className={`font-semibold text-sm ${roundOffAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {roundOffAmount >= 0 ? '+' : ''}₹{roundOffAmount.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Bill Discount & Loyalty - Compact View */}
-                      <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-gray-300 mt-1">
-                        {/* Bill Discount */}
-                        <div className="bg-yellow-50 border border-yellow-200 rounded p-1">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-gray-700 text-[10px] font-semibold">💰 {t('sales.pos.rightPanel.discount')}</span>
-                            <span className="text-[8px] text-gray-500 bg-white px-0.5 py-0.5 rounded">Ctrl+D</span>
-                          </div>
-                          <div className="flex items-center gap-0.5">
-                            <input
-                              ref={discountInputRef}
-                              type="number"
-                              min="0"
-                              max={activeTab.discountType === 'percentage' ? 100 : amountAfterTax}
-                              value={activeTab.billDiscount}
-                              onChange={(e) => {
-                                const value = Number(e.target.value);
-                                // Calculate max discount allowed to prevent negative total
-                                let maxAllowedDiscount = amountAfterTax - (activeTab.loyaltyPointsUsed || 0);
-
-                                // If percentage, convert max amount to percentage
-                                let maxValue = 0;
-                                if (activeTab.discountType === 'percentage') {
-                                  maxValue = amountAfterTax > 0 ? (maxAllowedDiscount / amountAfterTax) * 100 : 0;
-                                  maxValue = Math.min(100, maxValue); // Cap at 100%
-                                } else {
-                                  maxValue = maxAllowedDiscount;
-                                }
-                                // Round to 2 decimal places for safety
-                                maxValue = Math.floor(maxValue * 100) / 100;
-
-                                if (value >= 0 && value <= maxValue) {
-                                  updateActiveTab({ billDiscount: value });
-                                }
-                              }}
-                              className="flex-1 px-2 py-1.5 text-right text-sm font-bold rounded border border-yellow-300 bg-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 focus:outline-none"
-                              placeholder="0"
-                            />
-                            <select
-                              value={activeTab.discountType}
-                              onChange={(e) => updateActiveTab({ discountType: e.target.value, billDiscount: 0 })}
-                              className="px-1.5 py-1.5 text-xs font-semibold rounded border border-yellow-300 bg-white focus:border-yellow-500 focus:outline-none"
-                            >
-                              <option value="flat">₹</option>
-                              <option value="percentage">%</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Loyalty Points */}
-                        {activeTab.selectedCustomer && (activeTab.selectedCustomer.points > 0 || activeTab.loyaltyPointsUsed > 0 || (activeTab.initialLoyaltyPointsUsed || 0) > 0) ? (
-                          <div className="bg-purple-50 border border-purple-200 rounded p-1">
-                            <div className="flex items-center justify-between mb-0.5">
-                              <span className="text-gray-700 text-[10px] font-semibold">🎁 {t('sales.pos.rightPanel.loyalty')}</span>
-                              <span className="text-[8px] text-gray-500 bg-white px-0.5 py-0.5 rounded">Ctrl+L</span>
-                            </div>
-                            <div className="flex items-center gap-0.5">
-                              <input
-                                ref={loyaltyPointsInputRef}
-                                type="number"
-                                min="0"
-                                max={activeTab.selectedCustomer.points}
-                                value={activeTab.loyaltyPointsUsed}
-                                onChange={(e) => {
-                                  const value = Number(e.target.value);
-                                  // Maximum points allowed strictly by available points + points already used in this order (if editing)
-                                  const customerPoints = activeTab.selectedCustomer.points;
-                                  const alreadyUsed = activeTab.initialLoyaltyPointsUsed || 0;
-                                  const effectiveAvailablePoints = customerPoints + alreadyUsed;
-
-                                  // Also explicitly cap by the remaining bill amount
-                                  // Loyalty Deduction = Value (1 point = 1 rupee)
-                                  const remainingBillAmount = Math.max(0, amountAfterTax - billDiscountAmount);
-
-                                  // The user cannot use more than their total available balance
-                                  // AND cannot use more than the bill total
-                                  const effectiveMax = Math.min(effectiveAvailablePoints, remainingBillAmount + (activeTab.loyaltyPointsUsed || 0));
-                                  // Wait, remainingBillAmount is calculated AFTER loyalty deduction in some contexts?
-                                  // line 980: amountBeforeRounding = amountAfterTax - billDiscountAmount - loyaltyDeduction;
-                                  // So remainingBillAmount above (amountAfterTax - billDiscountAmount) is "Pre-Loyalty Total".
-                                  // So simple Math.min(effectiveAvailablePoints, PreLoyaltyTotal) is correct.
-
-                                  const maxPossible = Math.min(effectiveAvailablePoints, Math.max(0, amountAfterTax - billDiscountAmount));
-
-                                  if (value >= 0 && value <= maxPossible) {
-                                    updateActiveTab({ loyaltyPointsUsed: value });
-                                  }
-                                }}
-                                className="flex-1 px-2 py-1.5 text-right text-sm font-bold rounded border border-purple-300 bg-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                                placeholder="0"
-                              />
-                              <span className="text-[10px] text-gray-600 font-medium">/{activeTab.selectedCustomer.points}</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="bg-gray-50 border border-gray-200 rounded p-1 flex items-center justify-center">
-                            <span className="text-[9px] text-gray-400">{t('sales.pos.rightPanel.noLoyalty')}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Grand Total - Big View */}
-                      <div className="bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300 rounded-lg p-2 mt-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-700 text-xs font-bold">{t('sales.pos.rightPanel.grandTotal')}</span>
-                          <span className="text-2xl font-bold text-green-700">₹{grandTotal.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    /* EXPANDED VIEW - All Details */
                     <>
                       {/* Subtotal */}
                       <div className="flex justify-between items-center">
@@ -2888,17 +2662,17 @@ const POSBillingSystem = () => {
                           {taxSettings.taxType === 'SGST' ? (
                             <>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600 text-xs">{t('sales.pos.table.sgst')}:</span>
-                                <span className="font-semibold text-purple-700 text-sm">₹{taxBreakdown.sgst.toFixed(2)}</span>
+                                <span className="text-gray-600 text-xs">{t('sales.pos.table.cgst')} {GST_RATE / 2}%:</span>
+                                <span className="font-semibold text-purple-700 text-sm">₹{taxBreakdown.cgst.toFixed(2)}</span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-600 text-xs">{t('sales.pos.table.cgst')}:</span>
-                                <span className="font-semibold text-purple-700 text-sm">₹{taxBreakdown.cgst.toFixed(2)}</span>
+                                <span className="text-gray-600 text-xs">{t('sales.pos.table.sgst')} {GST_RATE / 2}%:</span>
+                                <span className="font-semibold text-purple-700 text-sm">₹{taxBreakdown.sgst.toFixed(2)}</span>
                               </div>
                             </>
                           ) : (
                             <div className="flex justify-between items-center">
-                              <span className="text-gray-600 text-xs">{t('sales.pos.table.igst')}:</span>
+                              <span className="text-gray-600 text-xs">{t('sales.pos.table.igst')} {GST_RATE}%:</span>
                               <span className="font-semibold text-purple-700 text-sm">₹{taxBreakdown.igst.toFixed(2)}</span>
                             </div>
                           )}
@@ -3010,7 +2784,6 @@ const POSBillingSystem = () => {
                         </div>
                       </div>
                     </>
-                  )}
                 </div>
               </div>
 
@@ -3021,36 +2794,57 @@ const POSBillingSystem = () => {
                     <CreditCard size={16} /> {t('sales.pos.rightPanel.quickPayment')}
                   </h3>
 
-                  {/* Payment Method Dropdown */}
+                  {/* Payment Method Buttons */}
                   <div className="mb-2">
                     <label className="text-xs text-gray-600 mb-1 flex justify-between items-center">
                       <span>{t('sales.pos.rightPanel.paymentMethod')}</span>
                       <span className="text-[10px] text-gray-500">{t('sales.pos.rightPanel.paymentShortcuts')}</span>
                     </label>
-                    <select
-                      value={activeTab.paymentType === 'split' ? 'split' : activeTab.paymentMethod}
-                      onChange={(e) => {
-                        if (e.target.value === 'split') {
-                          updateActiveTab({
-                            paymentType: 'split',
-                            splitPayments: { cash: 0, card: 0, upi: 0, credit: 0, loyaltyPoints: 0 }
-                          });
-                        } else {
-                          updateActiveTab({
-                            paymentType: 'single',
-                            paymentMethod: e.target.value,
-                            receivedAmount: e.target.value === 'credit' ? 0 : grandTotal
-                          });
-                        }
-                      }}
-                      className="w-full px-2 py-1.5 text-sm rounded border-2 border-gray-300 bg-white focus:border-blue-500 focus:outline-none font-medium"
-                    >
-                      <option value="cash">💵 {t('sales.pos.rightPanel.methods.cash')}</option>
-                      <option value="card">💳 {t('sales.pos.rightPanel.methods.card')}</option>
-                      <option value="upi">📱 {t('sales.pos.rightPanel.methods.upi')}</option>
-                      <option value="credit">📝 {t('sales.pos.rightPanel.methods.credit')}</option>
-                      <option value="split">🔀 {t('sales.pos.rightPanel.methods.split')}</option>
-                    </select>
+                    {/* Two rows: Cash / Card / UPI, then Credit / Split */}
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {[
+                        { value: 'cash', icon: '💵', shortcut: 'Alt+1', span: 'col-span-2' },
+                        { value: 'card', icon: '💳', shortcut: 'Alt+2', span: 'col-span-2' },
+                        { value: 'upi', icon: '📱', shortcut: 'Alt+3', span: 'col-span-2' },
+                        { value: 'credit', icon: '📝', shortcut: 'Alt+4', span: 'col-span-3' },
+                        { value: 'split', icon: '🔀', shortcut: 'Alt+5', span: 'col-span-3' }
+                      ].map(({ value, icon, shortcut, span }) => {
+                        const selected = value === 'split'
+                          ? activeTab.paymentType === 'split'
+                          : activeTab.paymentType === 'single' && activeTab.paymentMethod === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            title={shortcut}
+                            onClick={() => {
+                              if (value === 'split') {
+                                updateActiveTab({
+                                  paymentType: 'split',
+                                  splitPayments: { cash: 0, card: 0, upi: 0, credit: 0, loyaltyPoints: 0 }
+                                });
+                              } else {
+                                updateActiveTab({
+                                  paymentType: 'single',
+                                  paymentMethod: value,
+                                  receivedAmount: value === 'credit' ? 0 : grandTotal
+                                });
+                              }
+                            }}
+                            className={`${span} flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md border text-xs font-medium transition-colors ${selected
+                              ? 'bg-blue-50 border-blue-400 text-blue-700'
+                              : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                              }`}
+                          >
+                            <span className="text-sm leading-none">{icon}</span>
+                            {/* Labels carry "(Alt+n)" for the old dropdown; the shortcut is in the tooltip here */}
+                            <span className="truncate">
+                              {t(`sales.pos.rightPanel.methods.${value}`).replace(/\s*\(Alt\+\d\)/, '')}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Cash Payment - Show received amount and change */}
@@ -3197,7 +2991,7 @@ const POSBillingSystem = () => {
                   onClick={completePayment}
                   disabled={
                     isProcessing ||
-                    activeTab.billItems.length === 0 ||
+                    filledBillItems.length === 0 ||
                     (activeTab.paymentType === 'split' && remainingAmount > 0)
                   }
                   className="w-full py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-semibold hover:from-green-700 hover:to-green-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md transition-all text-sm"
@@ -3205,7 +2999,7 @@ const POSBillingSystem = () => {
                   {isProcessing ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    <CreditCard size={16} />
+                    <Save size={16} />
                   )}
                   {isProcessing ? t('common.processing') || 'Processing...' : t('sales.pos.rightPanel.completePayment')}
                 </button>
@@ -3215,7 +3009,7 @@ const POSBillingSystem = () => {
                   onClick={completeAndPrint}
                   disabled={
                     isProcessing ||
-                    activeTab.billItems.length === 0 ||
+                    filledBillItems.length === 0 ||
                     (activeTab.paymentType === 'split' && remainingAmount > 0)
                   }
                   className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md transition-all text-sm"
@@ -3225,7 +3019,7 @@ const POSBillingSystem = () => {
                   ) : (
                     <Printer size={16} />
                   )}
-                  {isProcessing ? t('common.processing') || 'Processing...' : t('sales.pos.rightPanel.completeAndPrint') || 'Complete & Print'}
+                  {isProcessing ? t('common.processing') || 'Processing...' : t('sales.pos.rightPanel.completeAndPrint') || 'Save & Print'}
                 </button>
               </div>
             </div>
@@ -3248,7 +3042,7 @@ const POSBillingSystem = () => {
                 {/* Subtotal - Large and Clear */}
                 <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">Subtotal ({activeTab.billItems.length} items)</span>
+                    <span className="text-sm font-medium text-gray-700">Subtotal ({filledBillItems.length} items)</span>
                     <span className="text-2xl font-bold text-blue-700">₹{subtotal.toFixed(2)}</span>
                   </div>
                 </div>
@@ -3290,17 +3084,17 @@ const POSBillingSystem = () => {
                       {taxSettings.taxType === 'SGST' ? (
                         <>
                           <div className="flex justify-between text-xs">
-                            <span className="text-gray-600">SGST ({taxBreakdown.sgst > 0 ? ((taxBreakdown.sgst / taxBreakdown.taxableAmount) * 100).toFixed(1) : 0}%)</span>
-                            <span className="font-medium">₹{taxBreakdown.sgst.toFixed(2)}</span>
+                            <span className="text-gray-600">CGST {GST_RATE / 2}%</span>
+                            <span className="font-medium">₹{taxBreakdown.cgst.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-xs">
-                            <span className="text-gray-600">CGST ({taxBreakdown.cgst > 0 ? ((taxBreakdown.cgst / taxBreakdown.taxableAmount) * 100).toFixed(1) : 0}%)</span>
-                            <span className="font-medium">₹{taxBreakdown.cgst.toFixed(2)}</span>
+                            <span className="text-gray-600">SGST {GST_RATE / 2}%</span>
+                            <span className="font-medium">₹{taxBreakdown.sgst.toFixed(2)}</span>
                           </div>
                         </>
                       ) : (
                         <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">IGST ({taxBreakdown.igst > 0 ? ((taxBreakdown.igst / taxBreakdown.taxableAmount) * 100).toFixed(1) : 0}%)</span>
+                          <span className="text-gray-600">IGST {GST_RATE}%</span>
                           <span className="font-medium">₹{taxBreakdown.igst.toFixed(2)}</span>
                         </div>
                       )}
@@ -3584,11 +3378,11 @@ const POSBillingSystem = () => {
               <button
                 onClick={completePayment}
                 disabled={
-                  activeTab.billItems.length === 0
+                  filledBillItems.length === 0
                 }
                 className="w-full py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-semibold hover:from-green-700 hover:to-green-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md transition-all text-sm"
               >
-                <CreditCard size={16} /> Complete Payment
+                <Save size={16} /> Save Bill
                 {activeTab.paymentType === 'single' && activeTab.paymentMethod === 'cash' && activeTab.receivedAmount >= grandTotal && (
                   <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
                     Change: ₹{(activeTab.receivedAmount - grandTotal).toFixed(2)}
@@ -3601,7 +3395,7 @@ const POSBillingSystem = () => {
               <button
                 onClick={completeAndPrint}
                 disabled={
-                  activeTab.billItems.length === 0
+                  filledBillItems.length === 0
                 }
                 className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md transition-all text-sm"
               >
@@ -3719,6 +3513,8 @@ const POSBillingSystem = () => {
                 phone: customerData.mobile_number || '',
                 email: customerData.email || '',
                 address: `${customerData.address_line_1 || ''}${customerData.address_line_2 ? ', ' + customerData.address_line_2 : ''}, ${customerData.city || ''}, ${customerData.state || ''} - ${customerData.pincode || ''}`.trim(),
+                addressLine1: customerData.address_line_1 || '',
+                vehicleNumber: customerData.vehicle_number || '',
                 city: customerData.city || '',
                 state: customerData.state || '',
                 pincode: customerData.pincode || '',

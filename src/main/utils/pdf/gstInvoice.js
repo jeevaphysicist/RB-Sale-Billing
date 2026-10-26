@@ -531,7 +531,7 @@ export const generateGSTInvoicePDF = (invoiceData, config = {}) => {
       
       // Signature section
       const signatureY = declarationY + declarationHeight - 40;
-      const forText = config.authorizedSignatoryFor || `for ${invoiceData.company?.name || 'LUCTUS INDIA'}`;
+      const forText = config.authorizedSignatoryFor || `for ${invoiceData.company?.name || ''}`;
       
       doc.fontSize(10).font('Helvetica-Bold')
          .text(forText, margin + contentWidth - 120, signatureY, {

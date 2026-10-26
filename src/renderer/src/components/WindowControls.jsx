@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Minimize2, Square, X,Truck, UserPlus,PcCase,ChartColumnBig, LayoutDashboard, ShoppingCart, ShoppingBag, Package, FolderTree, Tag, FileText, Settings } from 'lucide-react'
-import LanguageSwitcher from './LanguageSwitcher'
+import { Minimize2, Square, X, UserPlus, ChartColumnBig, LayoutDashboard, ShoppingCart, Package, FolderTree, Tag, FileText, Settings } from 'lucide-react'
 import FontSizeControls from './FontSizeControls'
 import icon from '../assets/icon.png'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -45,16 +44,14 @@ const WindowControls = ({ title = 'Application', showIcon = true, showTitle = tr
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { name: 'Sales', icon: ShoppingCart, path: '/sales' },
-    { name: 'Purchase', icon: ShoppingBag, path: '/purchases' },
-    { name: 'Products', icon: PcCase, path: '/products' },
     { name: 'Customers', icon: UserPlus, path: '/customers' },
-    { name: 'Vendors', icon: Truck, path: '/suppliers' },
-    { name: 'Reports', icon: ChartColumnBig, path: '/reports' },
+    { name: 'Reports', icon: ChartColumnBig, path: '/reports/sales', match: '/reports' },
     { name: 'Settings', icon: Settings, path: '/settings' }
   ]
 
-  const isActive = (path) => {
-    return location.pathname === path || location.pathname.startsWith(path + '/')
+  const isActive = (item) => {
+    const base = item.match || item.path
+    return location.pathname === base || location.pathname.startsWith(base + '/')
   }
 
   return (
@@ -77,7 +74,7 @@ const WindowControls = ({ title = 'Application', showIcon = true, showTitle = tr
         <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' }}>
           {showNav && menuItems.map((item) => {
             const Icon = item.icon
-            const active = isActive(item.path)
+            const active = isActive(item)
             return (
               <button
                 key={item.path}
@@ -97,7 +94,6 @@ const WindowControls = ({ title = 'Application', showIcon = true, showTitle = tr
 
           <div className={`flex items-center gap-1 ${showNav ? 'ml-1 pl-1 border-l border-slate-600/50' : ''}`}>
             {showFontControls && <FontSizeControls variant="compact" />}
-            <LanguageSwitcher />
           </div>
         </div>
       )}

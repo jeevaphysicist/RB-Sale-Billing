@@ -321,6 +321,10 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
         doc.text(`Cell: ${company.phone}`, left, y, { width: contentW, align: 'center' });
         y = doc.y;
       }
+      if (company.email) {
+        doc.text(`Email: ${company.email}`, left, y, { width: contentW, align: 'center' });
+        y = doc.y;
+      }
 
       // Footer band
       y += 10;

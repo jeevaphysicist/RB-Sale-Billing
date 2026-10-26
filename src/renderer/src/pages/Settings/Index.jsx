@@ -10,6 +10,27 @@ import PrinterSettings from './PrinterSettings';
 import License from './License';
 import { useTranslation } from 'react-i18next';
 
+const inputClass = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
+
+const StoreSection = ({ title, description, cols = 'md:grid-cols-2', children }) => (
+  <section className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-x-8 gap-y-3">
+    <div>
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <p className="text-xs text-gray-500 mt-1">{description}</p>
+    </div>
+    <div className={`grid grid-cols-1 ${cols} gap-4 max-w-3xl`}>{children}</div>
+  </section>
+);
+
+const Field = ({ label, hint, span = '', value, ...props }) => (
+  <div className={`space-y-1.5 ${span}`}>
+    <label className="text-sm font-medium text-gray-700">
+      {label} {hint && <span className="text-gray-400 font-normal">({hint})</span>}
+    </label>
+    <input type="text" value={value || ''} className={inputClass} {...props} />
+  </div>
+);
+
 const Settings = () => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('store');
@@ -57,18 +78,18 @@ const Settings = () => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const [storeDetails, setStoreDetails] = useState({
-    store_name: 'Rabtoise Technologies',
-    address_line1: '70c main, road - 621297, New Data, Trichy City, TN State - 123456',
-    address_line2: 'K.VADAMADURAI CHATIRAM',
-    city: 'ERODE',
-    state: 'TAMIL NADU',
-    pincode: '638316',
-    district: 'ERODE',
-    pan: 'AAXXP1791H',
+    store_name: '',
+    address_line1: '',
+    address_line2: '',
+    city: '',
+    state: '',
+    pincode: '',
+    district: '',
+    pan: '',
     phone: '',
-    email: 'support@rabtoise.org',
+    email: '',
     website: '',
-    gstin: '22AAAAA0000A1Z5',
+    gstin: '',
     god_name: '',
     fassai_no: ''
   });
@@ -195,17 +216,24 @@ const Settings = () => {
       setTemplateLoading(true);
       const response = await templateService.getSettings(templateTab);
       if (response.success && response.data) {
+        const loaded = response.data.config || {
+          fontFamily: 'Helvetica',
+          showTax: true,
+          showDiscount: true,
+          showGst: true,
+          showHsn: false,
+          showOutstanding: false,
+          headerText: 'Tax Invoice',
+          footerText: 'Thank you for your business!'
+        };
+        // English only: drop any previously saved Tamil invoice language / fonts
+        const tamilFont = ['NotoSansTamil', 'MuktaMalar'].includes(loaded.fontFamily);
         setTemplateSettings({
           template_name: response.data.template_name || '80mm',
-          config: response.data.config || {
-            fontFamily: 'Helvetica',
-            showTax: true,
-            showDiscount: true,
-            showGst: true,
-            showHsn: false,
-            showOutstanding: false,
-            headerText: 'Tax Invoice',
-            footerText: 'Thank you for your business!'
+          config: {
+            ...loaded,
+            invoiceLanguage: 'en',
+            fontFamily: tamilFont ? 'Helvetica' : loaded.fontFamily
           }
         });
       }
@@ -227,7 +255,7 @@ const Settings = () => {
       // Apply current store details
       previewOrder.storeDetails = {
         store: storeDetails.store_name || 'Your Store Name',
-        address: `${storeDetails.address_line1 || ''}${storeDetails.address_line2 ? ', ' + storeDetails.address_line2 : ''}, ${storeDetails.city || ''}, ${storeDetails.state || ''} - ${storeDetails.pincode || ''}`,
+        address: [storeDetails.address_line1, storeDetails.address_line2, storeDetails.city, [storeDetails.state, storeDetails.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', '),
         phone: storeDetails.phone || '',
         email: storeDetails.email || '',
         website: storeDetails.website || '',
@@ -285,17 +313,17 @@ const Settings = () => {
         // Prepare invoice data for GST/Non-GST templates
         previewData = {
           company: {
-            name: storeDetails.store_name || 'LUCTUS INDIA',
+            name: storeDetails.store_name || '',
             god_name: storeDetails.god_name || '',
-            address: storeDetails.address_line1 || 'NO.1, MANICKCAM PALAYAM',
-            address2: storeDetails.address_line2 || 'K.VADAMADURAI CHATIRAM',
-            city: `${storeDetails.city || 'ERODE'} - ${storeDetails.pincode || '638316'}`,
-            district: `DIST:${storeDetails.city || 'ERODE'}, ${storeDetails.state || 'TAMIL NADU'}`,
-            gstin: storeDetails.gstin || '33ASZPK7ROPIZM',
+            address: storeDetails.address_line1 || '',
+            address2: storeDetails.address_line2 || '',
+            city: storeDetails.city ? `${storeDetails.city}${storeDetails.pincode ? ' - ' + storeDetails.pincode : ''}` : '',
+            district: storeDetails.district ? `DIST:${storeDetails.district}${storeDetails.state ? ', ' + storeDetails.state : ''}` : (storeDetails.state || ''),
+            gstin: storeDetails.gstin || '',
             fassai_no: storeDetails.fassai_no || '',
-            pan: storeDetails.pan || 'AAXXP1791H',
-            email: storeDetails.email || 'info@luctusindia.com',
-            phone: storeDetails.phone || '9876543210'
+            pan: storeDetails.pan || '',
+            email: storeDetails.email || '',
+            phone: storeDetails.phone || ''
           },
           invoiceNumber: 'INV-PREVIEW-001',
           orderDate: new Date().toISOString(),
@@ -438,93 +466,76 @@ const Settings = () => {
     }
   };
 
+  const navGroups = [
+    {
+      title: 'Business',
+      items: [
+        { id: 'store', icon: Store, label: t('settings.storeDetails') },
+        { id: 'templates', icon: FileText, label: t('settings.printTemplates') },
+        { id: 'printer', icon: Printer, label: t('settings.printerSettings') }
+      ]
+    },
+    {
+      title: 'Account',
+      items: [
+        { id: 'profile', icon: User, label: t('settings.myProfile.title') },
+        { id: 'password', icon: Lock, label: t('settings.changePassword.title') }
+      ]
+    },
+    {
+      title: 'System',
+      items: [
+        { id: 'accessibility', icon: Type, label: t('settings.accessibility') },
+        { id: 'license', icon: Shield, label: 'License' }
+      ]
+    }
+  ];
+
   return (
     <div className="p-6 max-w-[1600px] mx-auto h-[calc(100vh-64px)] overflow-hidden flex flex-col">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800 flex-shrink-0">{t('settings.title')}</h1>
+      <div className="mb-5 flex-shrink-0">
+        <h1 className="text-2xl font-bold text-gray-900">{t('settings.title')}</h1>
+        <p className="text-sm text-gray-500 mt-1">Manage your store, invoices, printers and account.</p>
+      </div>
 
       <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
         {/* Sidebar Navigation */}
-        <div className="w-full md:w-64 flex-shrink-0">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <button
-              onClick={() => setActiveTab('store')}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeTab === 'store'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-                }`}
-            >
-              <Store size={20} />
-              <span>{t('settings.storeDetails')}</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('templates')}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeTab === 'templates'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-                }`}
-            >
-              <FileText size={20} />
-              <span>{t('settings.printTemplates')}</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeTab === 'profile'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-                }`}
-            >
-              <User size={20} />
-              <span>{t('settings.myProfile.title')}</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('password')}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeTab === 'password'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-                }`}
-            >
-              <Lock size={20} />
-              <span>{t('settings.changePassword.title')}</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('accessibility')}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeTab === 'accessibility'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-                }`}
-            >
-              <Type size={20} />
-              <span>{t('settings.accessibility')}</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('printer')}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeTab === 'printer'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-                }`}
-            >
-              <Printer size={20} />
-              <span>{t('settings.printerSettings')}</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('license')}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${activeTab === 'license'
-                ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 font-medium'
-                : 'text-gray-600 hover:bg-gray-50'
-                }`}
-            >
-              <Shield size={20} />
-              <span>License</span>
-            </button>
+        <nav className="w-full md:w-64 flex-shrink-0 md:overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2 space-y-4">
+            {navGroups.map(group => (
+              <div key={group.title}>
+                <p className="px-3 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{group.title}</p>
+                <div className="space-y-0.5">
+                  {group.items.map(({ id, icon: Icon, label }) => {
+                    const active = activeTab === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => setActiveTab(id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors ${active
+                          ? 'bg-blue-50 text-blue-700 font-semibold'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                      >
+                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                          <Icon size={16} />
+                        </span>
+                        <span className="truncate">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        </nav>
 
         {/* Content Area */}
         <div className="flex-1 flex min-h-0 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           {activeTab === 'store' && (
-            <div className="flex-1 flex flex-col h-full overflow-y-auto p-6">
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-gray-800">{t('settings.storeDetails')}</h2>
+            <div className="flex-1 flex flex-col h-full min-h-0">
+              <div className="px-8 pt-6 pb-4 border-b border-gray-100">
+                <h2 className="text-xl font-semibold text-gray-900">{t('settings.storeDetails')}</h2>
                 <p className="text-gray-500 text-sm mt-1">{t('settings.store.subtitle')}</p>
               </div>
 
@@ -533,170 +544,34 @@ const Settings = () => {
                   <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                 </div>
               ) : (
-                <form onSubmit={handleSaveStoreDetails} className="space-y-6 max-w-4xl">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">{t('settings.store.storeName')} *</label>
-                      <input
-                        type="text"
-                        name="store_name"
-                        value={storeDetails.store_name}
-                        onChange={handleStoreChange}
-                        required
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={t('settings.store.placeholders.storeName')}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">God Name <span className="text-gray-400 font-normal">(shown above store name)</span></label>
-                      <input
-                        type="text"
-                        name="god_name"
-                        value={storeDetails.god_name || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g. Jai Ganesh, Sri Rama"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">{t('settings.store.gstin')}</label>
-                      <input
-                        type="text"
-                        name="gstin"
-                        value={storeDetails.gstin || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={t('settings.store.placeholders.gstin')}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">FSSAI No.</label>
-                      <input
-                        type="text"
-                        name="fassai_no"
-                        value={storeDetails.fassai_no || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter FSSAI licence number"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">PAN</label>
-                      <input
-                        type="text"
-                        name="pan"
-                        value={storeDetails.pan || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter PAN"
-                      />
-                    </div>
+                <form onSubmit={handleSaveStoreDetails} className="flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 overflow-y-auto px-8 py-6 space-y-8">
+                    <StoreSection title="Business identity" description="Shown at the top of every invoice.">
+                      <Field label={`${t('settings.store.storeName')} *`} name="store_name" value={storeDetails.store_name} onChange={handleStoreChange} required placeholder={t('settings.store.placeholders.storeName')} />
+                    </StoreSection>
+
+                    <StoreSection title="Tax & licences" description="Registration numbers printed on tax invoices.">
+                      <Field label={t('settings.store.gstin')} name="gstin" value={storeDetails.gstin} onChange={handleStoreChange} placeholder={t('settings.store.placeholders.gstin')} />
+                      <Field label="PAN" name="pan" value={storeDetails.pan} onChange={handleStoreChange} placeholder="Enter PAN" />
+                    </StoreSection>
+
+                    <StoreSection title="Address" description="Your business location." cols="md:grid-cols-4">
+                      <Field span="md:col-span-4" label={t('settings.store.addressLine1')} name="address_line1" value={storeDetails.address_line1} onChange={handleStoreChange} placeholder={t('settings.store.placeholders.addressLine1')} />
+                      <Field span="md:col-span-4" label={t('settings.store.addressLine2')} name="address_line2" value={storeDetails.address_line2} onChange={handleStoreChange} placeholder={t('settings.store.placeholders.addressLine2')} />
+                      <Field label={t('settings.store.city')} name="city" value={storeDetails.city} onChange={handleStoreChange} />
+                      <Field label="District" name="district" value={storeDetails.district} onChange={handleStoreChange} placeholder="Enter District" />
+                      <Field label={t('settings.store.state')} name="state" value={storeDetails.state} onChange={handleStoreChange} />
+                      <Field label={t('settings.store.pincode')} name="pincode" value={storeDetails.pincode} onChange={handleStoreChange} />
+                    </StoreSection>
+
+                    <StoreSection title="Contact" description="How customers can reach you.">
+                      <Field label={t('settings.store.phoneNumber')} name="phone" value={storeDetails.phone} onChange={handleStoreChange} />
+                      <Field label={t('settings.store.email')} type="email" name="email" value={storeDetails.email} onChange={handleStoreChange} />
+                      <Field span="md:col-span-2" label={t('settings.store.website')} type="url" name="website" value={storeDetails.website} onChange={handleStoreChange} placeholder={t('settings.store.placeholders.website')} />
+                    </StoreSection>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">{t('settings.store.addressLine1')}</label>
-                    <input
-                      type="text"
-                      name="address_line1"
-                      value={storeDetails.address_line1 || ''}
-                      onChange={handleStoreChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder={t('settings.store.placeholders.addressLine1')}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">{t('settings.store.addressLine2')}</label>
-                    <input
-                      type="text"
-                      name="address_line2"
-                      value={storeDetails.address_line2 || ''}
-                      onChange={handleStoreChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder={t('settings.store.placeholders.addressLine2')}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">{t('settings.store.city')}</label>
-                      <input
-                        type="text"
-                        name="city"
-                        value={storeDetails.city || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">{t('settings.store.state')}</label>
-                      <input
-                        type="text"
-                        name="state"
-                        value={storeDetails.state || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">{t('settings.store.pincode')}</label>
-                      <input
-                        type="text"
-                        name="pincode"
-                        value={storeDetails.pincode || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">District</label>
-                      <input
-                        type="text"
-                        name="district"
-                        value={storeDetails.district || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter District"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">{t('settings.store.phoneNumber')}</label>
-                      <input
-                        type="text"
-                        name="phone"
-                        value={storeDetails.phone || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">{t('settings.store.email')}</label>
-                      <input
-                        type="email"
-                        name="email"
-                        value={storeDetails.email || ''}
-                        onChange={handleStoreChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">{t('settings.store.website')}</label>
-                    <input
-                      type="url"
-                      name="website"
-                      value={storeDetails.website || ''}
-                      onChange={handleStoreChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder={t('settings.store.placeholders.website')}
-                    />
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-100 flex justify-end">
+                  <div className="px-8 py-3 border-t border-gray-200 bg-gray-50 flex justify-end">
                     <button
                       type="submit"
                       disabled={saving}
@@ -818,33 +693,9 @@ const Settings = () => {
                               }))}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
-                              {/* Show Tamil fonts when Tamil is selected, English fonts otherwise */}
-                              {templateSettings.config.invoiceLanguage === 'ta' ? (
-                                <>
-                                  <option value="NotoSansTamil">{t('settings.templates.notoSansTamil') || 'Noto Sans Tamil'}</option>
-                                  <option value="MuktaMalar">{t('settings.templates.muktaMalar') || 'Mukta Malar'}</option>
-                                </>
-                              ) : (
-                                <>
-                                  <option value="Helvetica">{t('settings.templates.helveticaDefault')}</option>
-                                  <option value="Courier">{t('settings.templates.courierMonospace')}</option>
-                                  <option value="Times-Roman">{t('settings.templates.timesRoman')}</option>
-                                </>
-                              )}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-500 mb-1 block">{t('settings.templates.invoiceLanguage')}</label>
-                            <select
-                              value={templateSettings.config.invoiceLanguage || 'en'}
-                              onChange={(e) => setTemplateSettings(prev => ({
-                                ...prev,
-                                config: { ...prev.config, invoiceLanguage: e.target.value }
-                              }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="en">{t('settings.templates.english')}</option>
-                              <option value="ta">{t('settings.templates.tamil')}</option>
+                              <option value="Helvetica">{t('settings.templates.helveticaDefault')}</option>
+                              <option value="Courier">{t('settings.templates.courierMonospace')}</option>
+                              <option value="Times-Roman">{t('settings.templates.timesRoman')}</option>
                             </select>
                           </div>
                         </div>

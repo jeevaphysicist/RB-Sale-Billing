@@ -709,21 +709,9 @@ export const initDB = (dbPath) => {
         tables.push({
           name: 'store_settings_seed',
           sql: `
-            INSERT INTO store_settings (store_name, address_line1, city, state, pincode, phone, email, gstin)
-            SELECT 'My Store', '123 Main St', 'City', 'State', '123456', '9876543210', 'store@example.com', '22AAAAA0000A1Z5'
+            INSERT INTO store_settings (store_name)
+            SELECT ''
             WHERE NOT EXISTS (SELECT 1 FROM store_settings)
-          `
-        });
-
-        // Insert default Walk-in Customer if not exists
-        tables.push({
-          name: 'customers_seed_walkin',
-          sql: `
-            INSERT INTO customers (
-              id, customer_name, customer_code, mobile_number, customer_type, address_line_1, city, state, pincode, country
-            )
-            SELECT 0, 'Walk-in Customer', 'WALK-IN', '0000000000', 'Retail', '', '', '', '', 'India'
-            WHERE NOT EXISTS (SELECT 1 FROM customers WHERE id = 0 OR customer_code = 'WALK-IN')
           `
         });
 

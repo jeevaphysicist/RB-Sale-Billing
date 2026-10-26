@@ -100,12 +100,20 @@ const Layout = ({ children, onLogout, currentUser }) => {
     }
   ]
 
-  const isActivePath = (path) => {
+  const matchesPath = (path) => {
     if (path === '/') {
       return location.pathname === '/'
     }
-    return location.pathname.startsWith(path)
+    return location.pathname === path || location.pathname.startsWith(path + '/')
   }
+
+  // Longest matching menu path wins, so /sales/payments does not also highlight /sales
+  const bestMatchPath = mainMenuItems
+    .flatMap(item => [item.path, ...(item.subItems || []).flatMap(s => [s.path, ...(s.submenuItems || []).map(n => n.path)])])
+    .filter(p => p && matchesPath(p))
+    .reduce((best, p) => (p.length > best.length ? p : best), '')
+
+  const isActivePath = (path) => !!path && path === bestMatchPath
 
   const isMenuActive = (item) => {
     // Check if main item is active

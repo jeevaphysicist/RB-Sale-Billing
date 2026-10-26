@@ -168,7 +168,8 @@ export function initializeCustomerHandlers(db) {
       let countQuery = `SELECT COUNT(*) as total FROM customers`;
       const params = [];
       const countParams = [];
-      const conditions = [];
+      // The built-in walk-in record is not a real customer; never list it
+      const conditions = [`id <> 0`, `COALESCE(customer_code, '') <> 'WALK-IN'`];
       
       // Add status filter
       if (status) {

@@ -6,7 +6,11 @@ export const toDateString = (date) => {
   return `${y}-${m}-${d}`;
 };
 
+// Wide enough to cover every bill ever made
+export const ALL_TIME_RANGE = { startDate: '2000-01-01', endDate: '2099-12-31' };
+
 export const getPresetRange = (preset) => {
+  if (preset === 'allTime') return { ...ALL_TIME_RANGE };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const start = new Date(today);
@@ -51,3 +55,4 @@ export const formatDate = (value) => {
 };
 
 export const PRESETS = ['today', 'yesterday', 'thisWeek', 'thisMonth', 'thisYear', 'custom'];
+export const CUSTOMER_PRESETS = ['allTime', ...PRESETS];

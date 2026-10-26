@@ -17,14 +17,14 @@ import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { getPresetRange, formatMoney, formatAmount, formatDate, PRESETS } from './reportUtils';
+import { getPresetRange, formatMoney, formatAmount, formatDate, CUSTOMER_PRESETS } from './reportUtils';
 
 const CustomerReport = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const [preset, setPreset] = useState('thisMonth');
-  const [range, setRange] = useState(getPresetRange('thisMonth'));
+  const [preset, setPreset] = useState('allTime');
+  const [range, setRange] = useState(getPresetRange('allTime'));
   const [balanceOnly, setBalanceOnly] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -192,7 +192,7 @@ const CustomerReport = () => {
     { label: t('customerHistoryReport.cards.outstanding'), value: totals?.balance_due, icon: Clock, tone: 'bg-amber-50 text-amber-600' }
   ];
 
-  const rangeLabel = `${formatDate(range.startDate)} → ${formatDate(range.endDate)}`;
+  const rangeLabel = preset === 'allTime' ? t('auditSalesReport.presets.allTime') : `${formatDate(range.startDate)} → ${formatDate(range.endDate)}`;
 
   const sortIcon = (col) => {
     if (!col.sortable) return null;
@@ -251,7 +251,7 @@ const CustomerReport = () => {
           {/* Filters */}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-1.5">
-              {PRESETS.map((value) => (
+              {CUSTOMER_PRESETS.map((value) => (
                 <button
                   key={value}
                   onClick={() => handlePreset(value)}

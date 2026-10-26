@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Eye,
   Edit,
-  Trash2,
+  Ban,
   Download,
   Plus,
   Loader2,
@@ -93,7 +93,9 @@ const Index = () => {
     fetchData();
   }, []);
 
-  const handleDeleteClick = (order) => {
+  const isClosed = (order) => ['cancelled', 'returned'].includes(String(order.status || '').toLowerCase());
+
+  const handleCancelClick = (order) => {
     setDeleteModal({
       isOpen: true,
       order,
@@ -107,17 +109,17 @@ const Index = () => {
     try {
       setDeleteModal(prev => ({ ...prev, loading: true }));
 
-      const response = await salesOrderService.delete(deleteModal.order.id);
+      const response = await salesOrderService.cancel(deleteModal.order.id);
 
       if (response && response.success) {
-        toast.success(response.message || t('sales.messages.deleteSuccess'));
+        toast.success(response.message || t('sales.messages.cancelSuccess'));
         fetchData();
       } else {
-        throw new Error(response?.message || t('sales.messages.deleteFailed'));
+        throw new Error(response?.message || t('sales.messages.cancelFailed'));
       }
     } catch (error) {
-      console.error('Error deleting sales order:', error);
-      toast.error(error.message || t('sales.messages.deleteFailed'));
+      console.error('Error cancelling sales order:', error);
+      toast.error(error.message || t('sales.messages.cancelFailed'));
     } finally {
       setDeleteModal({ isOpen: false, order: null, loading: false });
     }
@@ -309,28 +311,29 @@ const Index = () => {
             <Printer className="w-4 h-4" />
           </button>
 
-          {row.status.toLowerCase() !== 'cancelled' && row.status.toLowerCase() !== 'returned' && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEditOrder(row);
-              }}
-              className="p-1 px-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              title={t('sales.actions.viewEdit')}
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-          )}
-
+          {/* Edit and Cancel stay visible but are disabled once the bill is cancelled / returned */}
           <button
+            disabled={isClosed(row)}
             onClick={(e) => {
               e.stopPropagation();
-              handleDeleteClick(row);
+              handleEditOrder(row);
             }}
-            className="p-1 px-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            title={t('sales.actions.delete')}
+            className="p-1 px-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            title={t('sales.actions.viewEdit')}
           >
-            <Trash2 className="w-4 h-4" />
+            <Edit className="w-4 h-4" />
+          </button>
+
+          <button
+            disabled={isClosed(row)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCancelClick(row);
+            }}
+            className="p-1 px-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            title={t('sales.actions.cancel')}
+          >
+            <Ban className="w-4 h-4" />
           </button>
         </div>
       )
@@ -394,12 +397,12 @@ const Index = () => {
       {/* Delete Confirmation Modal */}
       <AlertModal
         isVisible={deleteModal.isOpen}
-        modeltitle={t('sales.deleteTitle')}
-        message={t('sales.deleteMessage', { orderNumber: deleteModal.order?.order_number || '' })}
+        modeltitle={t('sales.cancelTitle')}
+        message={t('sales.cancelMessage', { orderNumber: deleteModal.order?.order_number || '' })}
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
         loading={deleteModal.loading}
-        buttonText={t('sales.actions.delete')}
+        buttonText={t('sales.actions.cancel')}
       />
 
       {/* New Print Preview Modal */}

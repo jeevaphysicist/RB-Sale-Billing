@@ -270,7 +270,7 @@
   "settings": {
     "title": "Settings",
     "storeDetails": "Store Details",
-    "printTemplates": "Print Templates",
+    "printTemplates": "Templates",
     "printerSettings": "Printer Settings",
     "accessibility": "Accessibility",
     "store": {
@@ -458,7 +458,7 @@
     "refundExceedsMaximum": "Exceeds maximum refundable amount",
     "printBill": "Print Bill",
     "saveDraft": "Save Draft",
-    "manageOrders": "Manage your sales orders. View, create, or delete sales.",
+    "manageOrders": "Manage your sales orders. View, create, or cancel sales.",
     "createOrder": "Create New Sales",
     "searchPlaceholder": "Search sales...",
     "noOrders": "No sales found",
@@ -646,8 +646,8 @@
         "tabNavigate": "Tab to navigate",
         "totalPaid": "Total Paid",
         "remaining": "Remaining",
-        "completePayment": "Complete Payment",
-        "completeAndPrint": "Complete & Print"
+        "completePayment": "Save Bill",
+        "completeAndPrint": "Save & Print"
       },
       "table": {
         "hash": "S.No",
@@ -913,6 +913,7 @@
       "thisWeek": "This Week",
       "thisMonth": "This Month",
       "thisYear": "This Year",
+      "allTime": "All Time",
       "custom": "Custom Range"
     },
     "table": {
@@ -1578,6 +1579,7 @@
       "thisWeek": "This Week",
       "thisMonth": "This Month",
       "thisYear": "This Year",
+      "allTime": "All Time",
       "custom": "Custom Range"
     },
     "table": {
@@ -1997,6 +1999,7 @@
       "thisWeek": "This Week",
       "thisMonth": "This Month",
       "thisYear": "This Year",
+      "allTime": "All Time",
       "custom": "Custom"
     },
     "statusFilter": {

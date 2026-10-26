@@ -550,11 +550,45 @@ export function initializeSalesOrderHandlers(db) {
             });
         }
 
+        // C. Refund payments already received: add an offsetting negative record per payment
+        // (keeps the audit trail; the order's net paid amount becomes 0)
+        const payments = await new Promise((resolve, reject) => {
+          globalDb.all(
+            `SELECT * FROM payment_records WHERE record_type = 'sales' AND reference_id = ? AND payment_amount > 0`,
+            [orderId],
+            (err, rows) => (err ? reject(err) : resolve(rows || []))
+          );
+        });
+        const alreadyRefunded = await new Promise((resolve, reject) => {
+          globalDb.get(
+            `SELECT COALESCE(SUM(payment_amount), 0) AS total FROM payment_records WHERE record_type = 'sales' AND reference_id = ? AND payment_amount < 0`,
+            [orderId],
+            (err, row) => (err ? reject(err) : resolve(Math.abs(row?.total || 0)))
+          );
+        });
+        let toRefund = payments.reduce((sum, p) => sum + p.payment_amount, 0) - alreadyRefunded;
+        for (const payment of payments) {
+          if (toRefund <= 0.005) break;
+          const amount = Math.min(payment.payment_amount, toRefund);
+          toRefund -= amount;
+          await new Promise((resolve, reject) => {
+            globalDb.run(
+              `INSERT INTO payment_records (record_type, reference_id, payment_date, payment_amount, payment_method, reference_number, notes)
+               VALUES ('sales', ?, date('now', '+5 hours', '30 minutes'), ?, ?, ?, ?)`,
+              [orderId, -amount, payment.payment_method, payment.reference_number, `Refund - order ${order.order_number} cancelled`],
+              (err) => (err ? reject(err) : resolve())
+            );
+          });
+        }
+
         // Update order status
         await new Promise((resolve, reject) => {
           globalDb.run(
-            `UPDATE sales_orders SET 
-              status = 'cancelled', 
+            `UPDATE sales_orders SET
+              status = 'cancelled',
+              payment_status = 'refunded',
+              balance_amount = 0,
+              received_amount = 0,
               updated_at = datetime('now', '+5 hours', '30 minutes')
              WHERE id = ?`,
             [orderId],
@@ -1037,7 +1071,7 @@ export function initializeSalesOrderHandlers(db) {
             district: storeSettings?.district || '',
             pan: storeSettings?.pan || '',
             // Keep concatenated address for backward compatibility with thermal templates
-            address: storeSettings?.address_line1 ? `${storeSettings.address_line1}${storeSettings.address_line2 ? ', ' + storeSettings.address_line2 : ''}, ${storeSettings.city}, ${storeSettings.state} - ${storeSettings.pincode}` : '',
+            address: [storeSettings?.address_line1, storeSettings?.address_line2, storeSettings?.city, [storeSettings?.state, storeSettings?.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', '),
             phone: storeSettings?.phone || '',
             email: storeSettings?.email || '',
             website: storeSettings?.website || '',

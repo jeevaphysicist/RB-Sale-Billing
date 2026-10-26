@@ -572,19 +572,17 @@ export function generateThermalReceipt(doc, order, type, font, fontBold, config,
     centerText(order.storeDetails.god_name, 10, font);
   }
   // Store Name
-  centerText(order.storeDetails.store || 'SUPERMART', 16, fontBold);
+  centerText(order.storeDetails.store || '', 16, fontBold);
 
   // Store Info
   doc.font(font).fontSize(8);
-  const storeAddress = order.storeDetails.address || '123 Main Street, City Center';
-  const storePhone = order.storeDetails.phone ? `Tel: ${order.storeDetails.phone}` : 'Tel: (555) 123-4567';
+  // Store contact lines are printed only when the store has that detail saved
+  if (order.storeDetails.address) centerText(order.storeDetails.address, 8);
+  if (order.storeDetails.phone) centerText(`Tel: ${order.storeDetails.phone}`, 8);
+  if (order.storeDetails.email) centerText(`Email: ${order.storeDetails.email}`, 8);
 
-  centerText(storeAddress, 8);
-  centerText(storePhone, 8);
-
-  if (config.showGst) {
-    const storeGst = order.storeDetails.gstin ? `${t.gstin}: ${order.storeDetails.gstin}` : `${t.gstin}: 22AAAAA0000A1Z5`;
-    centerText(storeGst, 8);
+  if (config.showGst && order.storeDetails.gstin) {
+    centerText(`${t.gstin}: ${order.storeDetails.gstin}`, 8);
   }
 
   if (order.storeDetails.fassai_no) {

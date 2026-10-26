@@ -20,7 +20,7 @@ import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { getPresetRange, formatMoney, formatAmount, formatDate, PRESETS } from './reportUtils';
+import { getPresetRange, formatMoney, formatAmount, formatDate, CUSTOMER_PRESETS } from './reportUtils';
 import PaymentRecordForm from '../Sales/Payment record/AddEditForm';
 
 const TABS = ['bills', 'products', 'statement'];
@@ -38,11 +38,13 @@ const CustomerHistory = () => {
   const location = useLocation();
 
   // Start with the period chosen on the summary page, if any
-  const [preset, setPreset] = useState(location.state?.preset || 'thisYear');
-  const [range, setRange] = useState(location.state?.range || getPresetRange('thisYear'));
+  const [preset, setPreset] = useState(location.state?.preset || 'allTime');
+  const [range, setRange] = useState(location.state?.range || getPresetRange('allTime'));
   const [tab, setTab] = useState('bills');
   const [expandedBills, setExpandedBills] = useState({});
   const [search, setSearch] = useState('');
+  // Set when arriving from the dashboard's outstanding list
+  const [outstandingOnly, setOutstandingOnly] = useState(Boolean(location.state?.outstandingOnly));
   const [paymentBill, setPaymentBill] = useState(null);
 
   const [loading, setLoading] = useState(false);
@@ -87,22 +89,23 @@ const CustomerHistory = () => {
   const customer = report?.customer;
   const summary = report?.summary;
   const customerName = customer ? (customer.is_walk_in ? t('customerHistoryReport.walkIn') : customer.customer_name) : '';
-  const rangeLabel = `${formatDate(range.startDate)} → ${formatDate(range.endDate)}`;
+  const rangeLabel = preset === 'allTime' ? t('auditSalesReport.presets.allTime') : `${formatDate(range.startDate)} → ${formatDate(range.endDate)}`;
 
   // Client-side search over the active tab's rows
   const { bills, products, statement } = useMemo(() => {
     if (!report) return { bills: [], products: [], statement: [] };
+    const base = outstandingOnly ? { ...report, bills: report.bills.filter((bill) => bill.balance_due > 0.01) } : report;
     const term = search.trim().toLowerCase();
-    if (!term) return report;
+    if (!term) return base;
     const has = (...values) => values.some((v) => String(v ?? '').toLowerCase().includes(term));
     return {
-      bills: report.bills.filter((bill) =>
+      bills: base.bills.filter((bill) =>
         has(bill.order_number, bill.status) || bill.items.some((item) => has(item.product_name, item.hsn_code))
       ),
       products: report.products.filter((p) => has(p.product_name, p.hsn_code)),
       statement: report.statement.filter((entry) => has(entry.reference, entry.method))
     };
-  }, [report, search]);
+  }, [report, search, outstandingOnly]);
 
   const handleExport = () => {
     if (!report) return;
@@ -435,7 +438,7 @@ const CustomerHistory = () => {
           {/* Period */}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <div className="flex flex-wrap gap-1.5">
-              {PRESETS.map((value) => (
+              {CUSTOMER_PRESETS.map((value) => (
                 <button
                   key={value}
                   onClick={() => handlePreset(value)}
@@ -499,6 +502,17 @@ const CustomerHistory = () => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+            {tab === 'bills' && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none whitespace-nowrap">
+                <input
+                  type="checkbox"
+                  checked={outstandingOnly}
+                  onChange={(e) => setOutstandingOnly(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                />
+                Outstanding bills only
+              </label>
+            )}
           </div>
 
           <div className="overflow-auto flex-1">

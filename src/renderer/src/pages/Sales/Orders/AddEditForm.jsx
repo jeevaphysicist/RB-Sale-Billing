@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, Trash2, User, CreditCard, Smartphone, Gift, Plus, X, Eye, Download, Printer, Loader2 } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, User, CreditCard, Smartphone, Gift, Plus, X, Eye, Download, Printer, Loader2, Save } from 'lucide-react';
 import WindowControls from '../../../components/WindowControls';
 import POSHeader from '../../../components/POSHeader';
 import ConfirmationDialog from '../../../components/ConfirmationDialog';
@@ -140,23 +140,6 @@ const POSBillingSystem = () => {
       toast.error(t('sales.pos.errorLoading'));
       navigate('/sales');
     }
-  };
-  const WALK_IN_CUSTOMER_NAME = 'Walk-in Customer';
-
-  // Default Walk-in Customer (id null until loaded from DB)
-  const defaultWalkInCustomer = {
-    id: null,
-    name: WALK_IN_CUSTOMER_NAME,
-    type: 'Retail',
-    phone: '',
-    email: '',
-    address: '',
-    city: '',
-    state: '',
-    pincode: '',
-    gstin: '',
-    businessName: '',
-    points: 0
   };
 
   // LocalStorage keys for persistence
@@ -381,8 +364,8 @@ const POSBillingSystem = () => {
   const [lastUpdatedItemId, setLastUpdatedItemId] = useState(null);
   // Number of bill table rows that fit the visible table area (recomputed on resize)
   const [billFitRows, setBillFitRows] = useState(10);
-  // Leftover height below the last full row, filled so the columns run to the bottom
-  const [billFillerHeight, setBillFillerHeight] = useState(0);
+  // Row height that makes the visible rows fill the table area exactly (no leftover strip at the bottom)
+  const [billRowHeight, setBillRowHeight] = useState(null);
   // Text being typed into a Quantity / Price cell: { row, col, text }
   const [billCellDraft, setBillCellDraft] = useState(null);
 
@@ -390,13 +373,22 @@ const POSBillingSystem = () => {
     const container = billItemsContainerRef.current;
     if (!container) return;
     const measure = () => {
-      const headerHeight = container.querySelector('thead')?.offsetHeight || 0;
-      const rowHeight = container.querySelector('tbody tr')?.offsetHeight || 33;
-      const available = container.clientHeight - headerHeight;
+      const headerHeight = container.querySelector('thead')?.getBoundingClientRect().height || 0;
+      const firstRow = container.querySelector('tbody tr');
+      // Natural height: drop the stretched height first so the measurement does not feed back
+      let rowHeight = 33;
+      if (firstRow) {
+        const stretched = firstRow.style.height;
+        firstRow.style.height = '';
+        rowHeight = firstRow.getBoundingClientRect().height || 33;
+        firstRow.style.height = stretched;
+      }
+      // 1px spare so rounding never adds a scrollbar
+      const available = container.clientHeight - headerHeight - 1;
       const rows = Math.max(1, Math.floor(available / rowHeight));
       setBillFitRows(rows);
-      // 1px less than the gap so rounding never adds a scrollbar
-      setBillFillerHeight(Math.max(0, available - rows * rowHeight - 1));
+      // Spread the leftover space over the rows so the last row ends exactly at the bottom
+      setBillRowHeight(Math.floor((available / rows) * 100) / 100);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -627,64 +619,6 @@ const POSBillingSystem = () => {
     price_category: customer.price_category || 'Retail'
   });
 
-  // Create Walk-in Customer if it doesn't exist; returns mapped customer or null
-  const ensureWalkInCustomer = async () => {
-    try {
-      const response = await customerService.getCustomers({
-        searchTerm: WALK_IN_CUSTOMER_NAME,
-        sortKey: 'customer_name',
-        sortDirection: 'ASC',
-        page: 1,
-        limit: 10,
-        status: 'Active'
-      });
-
-      const existing = response.success
-        ? response.data.find(customer => customer.customer_name === WALK_IN_CUSTOMER_NAME)
-        : null;
-
-      if (existing) {
-        return mapCustomerFromApi(existing);
-      }
-
-      const walkInData = {
-        customer_name: WALK_IN_CUSTOMER_NAME,
-        customer_code: 'WALK-IN',
-        mobile_number: '0000000000',
-        customer_type: 'Retail',
-        customer_status: 'Active',
-        email: '',
-        address_line_1: '',
-        city: '',
-        state: '',
-        pincode: '',
-        opening_balance: 0,
-        credit_limit: 0
-      };
-
-      const createResponse = await customerService.createCustomer(walkInData);
-      if (!createResponse.success) {
-        return null;
-      }
-
-      const refetch = await customerService.getCustomers({
-        searchTerm: WALK_IN_CUSTOMER_NAME,
-        sortKey: 'customer_name',
-        sortDirection: 'ASC',
-        page: 1,
-        limit: 10,
-        status: 'Active'
-      });
-      const created = refetch.success
-        ? refetch.data.find(customer => customer.customer_name === WALK_IN_CUSTOMER_NAME)
-        : null;
-      return created ? mapCustomerFromApi(created) : null;
-    } catch (error) {
-      console.error('Error ensuring Walk-in Customer:', error);
-      return null;
-    }
-  };
-
   const resolveOrderCustomer = async () => {
     if (activeTab.selectedCustomer?.id) {
       return activeTab.selectedCustomer;
@@ -728,23 +662,12 @@ const POSBillingSystem = () => {
       }
     }
 
-    const walkInFromList = customers.find(c => c.name === WALK_IN_CUSTOMER_NAME);
-    if (walkInFromList?.id) {
-      return walkInFromList;
-    }
-
-    const ensured = await ensureWalkInCustomer();
-    if (ensured?.id) {
-      await fetchCustomers();
-      return ensured;
-    }
-
-    return defaultWalkInCustomer;
+    toast.error('Please select a customer or enter customer details before saving the bill.');
+    return false;
   };
 
   useEffect(() => {
     const initializeData = async () => {
-      await ensureWalkInCustomer();
       await fetchCustomers();
     };
     initializeData();
@@ -1215,9 +1138,10 @@ const POSBillingSystem = () => {
     }
 
     // Validate customer selection
-    // if (!activeTab.selectedCustomer || !activeTab.selectedCustomer.id) {
-    //   errors.push(t('sales.pos.validation.selectCustomer'));
-    // }
+    // A customer is mandatory: pick an existing one or fill in the details of a new one
+    if (!hasSelectedCustomer && !hasManualCustomerDetails) {
+      errors.push('Customer is required. Select a customer or enter customer details.');
+    }
 
     // Manually typed customer (no existing customer selected) needs the same
     // required fields as the Add Customer form
@@ -1250,7 +1174,7 @@ const POSBillingSystem = () => {
       if (!item.qty || item.qty <= 0) {
         errors.push(t('sales.pos.validation.invalidQty', { index: index + 1 }));
       }
-      if (item.price === undefined || item.price === null || item.price < 0) {
+      if (!(item.price > 0)) {
         errors.push(t('sales.pos.validation.invalidPrice', { index: index + 1 }));
       }
     });
@@ -1310,7 +1234,7 @@ const POSBillingSystem = () => {
       paymentStatus = effectivePaidAmount > 0 ? 'partial' : 'pending';
     }
 
-    const finalCustomer = resolvedCustomer || defaultWalkInCustomer;
+    const finalCustomer = resolvedCustomer;
     const validCustomerId = finalCustomer?.id && Number(finalCustomer.id) > 0 ? finalCustomer.id : null;
 
     return {
@@ -2371,14 +2295,14 @@ const POSBillingSystem = () => {
             <div className="flex-1 flex flex-col overflow-hidden relative">
               {/* Customer Information */}
               <div className={`${cardBg} shadow-sm border ${borderColor} p-2 mb-1`}>
-                <h3 className="font-semibold flex items-center gap-2 mb-1.5 text-sm">
+                {/* Title on the left, search on the right; details grid below */}
+                <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold flex items-center gap-2 text-sm">
                   <User size={16} /> {t('sales.pos.rightPanel.customer')}
                 </h3>
-
-                {/* Search centred on top, customer details below it */}
-                <div className="flex flex-col gap-2">
                 {/* Customer Search Dropdown */}
-                <div className="relative w-full max-w-md mx-auto">
+                <div className="relative w-full sm:w-96">
                   <div className="flex gap-1">
                     <div className="relative flex-1">
                       <Search className="absolute left-2 top-2.5 text-gray-400" size={16} />
@@ -2478,19 +2402,21 @@ const POSBillingSystem = () => {
                     </div>
                   )}
                 </div>
+                </div>
 
                 {/* Customer Details - filled from the selected customer, or typed manually for a new one */}
-                <div className="w-full grid grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-2 pt-2 border-t border-gray-200">
+                <div className="w-full grid grid-cols-2 lg:grid-cols-12 gap-x-3 gap-y-2 pt-2 border-t border-gray-200">
                   {[
-                    { field: 'customer_name', label: t('customers.customerName'), required: true },
-                    { field: 'mobile_number', label: t('customers.mobileNumber'), required: true },
-                    { field: 'gstin', label: t('customers.gstin'), uppercase: true },
-                    { field: 'state', label: t('customers.state'), required: true, options: STATES },
-                    { field: 'vehicle_number', label: t('customers.vehicleNumber'), required: true, uppercase: true },
-                    // Address gets two columns so the second row lines up with the first
-                    { field: 'address_line_1', label: t('customers.addressLine1'), span: 'lg:col-span-2' },
-                    { field: 'pincode', label: t('customers.pincode'), maxLength: 6 }
-                  ].map(({ field, label, required, uppercase, options, maxLength, span }) => {
+                    // Row 1: required fields, 3 equal columns each
+                    { field: 'customer_name', label: t('customers.customerName'), required: true, placeholder: 'Enter customer name', span: 'lg:col-span-3' },
+                    { field: 'mobile_number', label: t('customers.mobileNumber'), required: true, placeholder: '10-digit mobile number', span: 'lg:col-span-3' },
+                    { field: 'vehicle_number', label: t('customers.vehicleNumber'), required: true, uppercase: true, placeholder: 'e.g. TN 38 AB 1234', span: 'lg:col-span-3' },
+                    { field: 'state', label: t('customers.state'), required: true, options: STATES, placeholder: 'Select state', span: 'lg:col-span-3' },
+                    // Row 2: optional fields; address is 6 columns so both rows share the same edges
+                    { field: 'gstin', label: t('customers.gstin'), uppercase: true, placeholder: '15-character GSTIN (optional)', span: 'lg:col-span-3' },
+                    { field: 'address_line_1', label: t('customers.addressLine1'), placeholder: 'Street, area, city (optional)', span: 'col-span-2 lg:col-span-6' },
+                    { field: 'pincode', label: t('customers.pincode'), maxLength: 6, placeholder: '6-digit pincode', span: 'lg:col-span-3' }
+                  ].map(({ field, label, required, uppercase, options, maxLength, span, placeholder }) => {
                     // With a selected customer only the mobile number is locked (greyed out)
                     const locked = hasSelectedCustomer && field === 'mobile_number';
                     const fieldClass = `w-full px-2 py-1.5 text-sm rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${locked ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : cardBg} ${uppercase ? 'uppercase' : ''}`;
@@ -2507,7 +2433,7 @@ const POSBillingSystem = () => {
                             disabled={locked}
                             className={fieldClass}
                           >
-                            <option value=""></option>
+                            <option value="">{placeholder}</option>
                             {options.map(option => (
                               <option key={option} value={option}>{option}</option>
                             ))}
@@ -2519,6 +2445,7 @@ const POSBillingSystem = () => {
                             onChange={(e) => updateCustomerFormField(field, e.target.value)}
                             readOnly={locked}
                             maxLength={maxLength}
+                            placeholder={placeholder}
                             className={fieldClass}
                           />
                         )}
@@ -2580,13 +2507,24 @@ const POSBillingSystem = () => {
                       {Array.from({ length: Math.max(billFitRows, activeTab.billItems.length + 1) }, (_, index) => {
                         const item = activeTab.billItems[index];
                         const blank = isBlankLine(item);
-                        const cellClass = 'w-full px-1.5 py-1.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-2 focus:ring-inset focus:ring-blue-500';
+                        // A row with anything typed in it needs a description, quantity and price
+                        const inUse = !!item && !blank && !isUnusedLabourChargeLine(item);
+                        const missing = {
+                          name: inUse && !String(item.name || '').trim(),
+                          qty: inUse && !(Number(item.qty) > 0),
+                          price: inUse && !(Number(item.rate) > 0)
+                        };
+                        const baseCellClass = 'w-full h-full px-1.5 py-1.5 text-sm bg-transparent border-0 outline-none focus:bg-blue-50 focus:ring-2 focus:ring-inset';
+                        const cellClassFor = (col) => missing[col]
+                          ? `${baseCellClass} bg-red-50 ring-2 ring-inset ring-red-500 focus:ring-red-500`
+                          : `${baseCellClass} focus:ring-blue-500`;
+                        const cellClass = cellClassFor('none');
                         // While a number cell is being edited, show exactly what was typed
                         const draftFor = (col) =>
                           billCellDraft && billCellDraft.row === index && billCellDraft.col === col ? billCellDraft.text : null;
                         return (
                           // The row holding the cursor is highlighted; clicking S.No jumps to its Item Description
-                          <tr key={index} className="hover:bg-gray-50 focus-within:bg-blue-100 focus-within:hover:bg-blue-100">
+                          <tr key={index} style={billRowHeight ? { height: billRowHeight } : undefined} className="hover:bg-gray-50 focus-within:bg-blue-100 focus-within:hover:bg-blue-100">
                             <td
                               onClick={() => focusBillCell(index, 'name')}
                               className="border border-gray-300 px-1 text-sm text-center text-gray-500 cursor-pointer select-none"
@@ -2601,7 +2539,7 @@ const POSBillingSystem = () => {
                                 value={item?.name || ''}
                                 onChange={(e) => updateBillRow(index, { name: e.target.value })}
                                 onKeyDown={(e) => handleBillCellKeyDown(e, index, 'name')}
-                                className={cellClass}
+                                className={cellClassFor('name')}
                               />
                             </td>
                             <td className="border border-gray-300 p-0">
@@ -2637,7 +2575,7 @@ const POSBillingSystem = () => {
                                 onChange={(e) => handleBillNumberChange(index, 'qty', e.target.value)}
                                 onBlur={() => setBillCellDraft(null)}
                                 onKeyDown={(e) => handleBillCellKeyDown(e, index, 'qty')}
-                                className={`${cellClass} text-center`}
+                                className={`${cellClassFor('qty')} text-center`}
                               />
                             </td>
                             <td className="border border-gray-300 p-0">
@@ -2650,7 +2588,7 @@ const POSBillingSystem = () => {
                                 onChange={(e) => handleBillNumberChange(index, 'price', e.target.value)}
                                 onBlur={() => setBillCellDraft(null)}
                                 onKeyDown={(e) => handleBillCellKeyDown(e, index, 'price')}
-                                className={`${cellClass} text-right`}
+                                className={`${cellClassFor('price')} text-right`}
                               />
                             </td>
                             <td className="border border-gray-300 px-1 text-center">
@@ -2667,14 +2605,6 @@ const POSBillingSystem = () => {
                           </tr>
                         );
                       })}
-                      {/* Filler: carries the column lines down to the bottom of the screen */}
-                      {billFillerHeight > 0 && activeTab.billItems.length + 1 <= billFitRows && (
-                        <tr aria-hidden="true" style={{ height: billFillerHeight }}>
-                          {Array.from({ length: 7 }, (_, col) => (
-                            <td key={col} className="border border-gray-300 bg-gray-100 p-0" />
-                          ))}
-                        </tr>
-                      )}
                     </tbody>
                   </table>
                   <datalist id="bill-unit-options">
@@ -3069,7 +2999,7 @@ const POSBillingSystem = () => {
                   {isProcessing ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    <CreditCard size={16} />
+                    <Save size={16} />
                   )}
                   {isProcessing ? t('common.processing') || 'Processing...' : t('sales.pos.rightPanel.completePayment')}
                 </button>
@@ -3089,7 +3019,7 @@ const POSBillingSystem = () => {
                   ) : (
                     <Printer size={16} />
                   )}
-                  {isProcessing ? t('common.processing') || 'Processing...' : t('sales.pos.rightPanel.completeAndPrint') || 'Complete & Print'}
+                  {isProcessing ? t('common.processing') || 'Processing...' : t('sales.pos.rightPanel.completeAndPrint') || 'Save & Print'}
                 </button>
               </div>
             </div>
@@ -3452,7 +3382,7 @@ const POSBillingSystem = () => {
                 }
                 className="w-full py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg font-semibold hover:from-green-700 hover:to-green-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md transition-all text-sm"
               >
-                <CreditCard size={16} /> Complete Payment
+                <Save size={16} /> Save Bill
                 {activeTab.paymentType === 'single' && activeTab.paymentMethod === 'cash' && activeTab.receivedAmount >= grandTotal && (
                   <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
                     Change: ₹{(activeTab.receivedAmount - grandTotal).toFixed(2)}

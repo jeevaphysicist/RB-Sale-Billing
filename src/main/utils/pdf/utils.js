@@ -292,7 +292,9 @@ export const mapOrderToInvoiceData = (order) => {
       address: order.storeDetails?.address_line1 || order.storeDetails?.address || '',
       address2: order.storeDetails?.address_line2 || '',
       city: order.storeDetails?.city ? `${order.storeDetails.city}${order.storeDetails?.pincode ? ' - ' + order.storeDetails.pincode : ''}` : '',
-      district: order.storeDetails?.district ? `DIST:${order.storeDetails.district}, ${order.storeDetails?.state || ''}` : '',
+      district: order.storeDetails?.district
+        ? `DIST:${order.storeDetails.district}${order.storeDetails?.state ? ', ' + order.storeDetails.state : ''}`
+        : (order.storeDetails?.state || ''),
       gstin: order.storeDetails?.gstin || '',
       pan: order.storeDetails?.pan || '',
       phone: order.storeDetails?.phone || '',

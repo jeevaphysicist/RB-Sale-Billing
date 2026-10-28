@@ -899,7 +899,7 @@ const PetpoojaSalesAdd = () => {
                                             {method === 'cash' ? 'payments' : method === 'upi' ? 'qr_code_2' : method === 'card' ? 'credit_card' : 'schedule'}
                                         </span>
                                         <span className="font-bold uppercase text-sm">
-                                            {method === 'credit' ? 'Pay Later' : method}
+                                            {method === 'credit' ? 'Pending (Credit Bill)' : method}
                                         </span>
                                     </button>
                                 ))}
@@ -954,7 +954,7 @@ const PetpoojaSalesAdd = () => {
                                 </div>
                             ))}
                             <div className="mt-2 pt-3 border-t border-dashed border-gray-200 flex justify-between items-center">
-                                <span className="font-medium text-gray-500">Remaining (Pay Later)</span>
+                                <span className="font-medium text-gray-500">Remaining (Credit Bill)</span>
                                 <span className="text-lg font-bold text-red-500">₹{calculateBalance().toFixed(2)}</span>
                             </div>
                         </div>

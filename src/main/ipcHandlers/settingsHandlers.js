@@ -32,7 +32,8 @@ export function initializeSettingsHandlers(db) {
     try {
       const {
         store_name, address_line1, address_line2, city, state, pincode,
-        district, pan, phone, email, website, gstin, god_name, fassai_no
+        district, pan, phone, email, website, gstin, god_name, fassai_no,
+        bill_start_serial, bill_start_fy
       } = details;
 
       // Ensure god_name and fassai_no columns exist (safe for old DBs)
@@ -68,12 +69,15 @@ export function initializeSettingsHandlers(db) {
             city = ?, state = ?, pincode = ?, district = ?, pan = ?,
             phone = ?, email = ?, website = ?, gstin = ?,
             god_name = ?, fassai_no = ?,
+            bill_start_serial = ?, bill_start_fy = ?,
             updated_at = datetime('now', '+5 hours', '30 minutes')
            WHERE id = (SELECT id FROM store_settings LIMIT 1)`,
           [
             store_name, address_line1, address_line2, city, state, pincode,
             district, pan, phone, email, website, gstin,
-            god_name || null, fassai_no || null
+            god_name || null, fassai_no || null,
+            Number(bill_start_serial) > 0 ? Math.floor(Number(bill_start_serial)) : null,
+            Number(bill_start_serial) > 0 ? Number(bill_start_fy) || null : null
           ],
           (err) => {
             if (err) reject(err);

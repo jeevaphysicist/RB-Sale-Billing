@@ -59,11 +59,10 @@ const AddEditForm = ({ isOpen, onClose, salesOrder, onSuccess }) => {
   // Payment methods with translations
   const paymentMethods = [
     { value: 'Cash', label: t('sales.paymentTracking.methods.cash') },
-    { value: 'Cheque', label: t('sales.paymentTracking.methods.cheque') },
+    // Cheque and NEFT payments (stored under the 'Card' payment bucket used by the sales report)
+    { value: 'Card', label: 'Cheque/NEFT' },
     { value: 'Bank Transfer', label: t('sales.paymentTracking.methods.bankTransfer') },
     { value: 'UPI', label: t('sales.paymentTracking.methods.upi') },
-    { value: 'Credit Card', label: t('sales.paymentTracking.methods.creditCard') },
-    { value: 'Debit Card', label: t('sales.paymentTracking.methods.debitCard') },
     { value: 'Net Banking', label: t('sales.paymentTracking.methods.netBanking') }
   ];
 
@@ -301,7 +300,7 @@ const AddEditForm = ({ isOpen, onClose, salesOrder, onSuccess }) => {
                     <tr key={record.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-900">{formatDate(record.payment_date)}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-green-600">{formatCurrency(record.payment_amount)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{record.payment_method}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{(/^(card|credit card|debit card|cheque)$/i.test(String(record.payment_method || '')) ? 'Cheque/NEFT' : record.payment_method)}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{record.reference_number || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{record.notes || '-'}</td>
                       <td className="px-4 py-3 text-center">
@@ -417,7 +416,7 @@ const AddEditForm = ({ isOpen, onClose, salesOrder, onSuccess }) => {
             </div>
 
             {/* Bank Details (conditional) */}
-            {['Bank Transfer', 'Cheque', 'Net Banking'].includes(formData.paymentMethod) && (
+            {['Bank Transfer', 'Card', 'Cheque', 'Net Banking'].includes(formData.paymentMethod) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -433,7 +432,7 @@ const AddEditForm = ({ isOpen, onClose, salesOrder, onSuccess }) => {
                     disabled={loading}
                   />
                 </div>
-                {formData.paymentMethod === 'Cheque' && (
+                {['Card', 'Cheque'].includes(formData.paymentMethod) && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       {t('sales.paymentTracking.form.chequeNumber')}
@@ -453,7 +452,7 @@ const AddEditForm = ({ isOpen, onClose, salesOrder, onSuccess }) => {
             )}
 
             {/* Transaction ID (for digital payments) */}
-            {['UPI', 'Credit Card', 'Debit Card', 'Net Banking'].includes(formData.paymentMethod) && (
+            {['UPI', 'Card', 'Net Banking'].includes(formData.paymentMethod) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t('sales.paymentTracking.form.transactionId')}

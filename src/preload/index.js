@@ -46,6 +46,14 @@ const api = {
   updateCustomer: (customerData) => ipcRenderer.invoke('customer:update', customerData),
   deleteCustomer: (customerId) => ipcRenderer.invoke('customer:delete', customerId),
   importCustomers: (customers) => ipcRenderer.invoke('customer:import', customers),
+  createMechanic: (data) => ipcRenderer.invoke('mechanic:create', data),
+  getMechanics: (filterParams) => ipcRenderer.invoke('mechanic:get-all', filterParams),
+  getMechanicById: (id) => ipcRenderer.invoke('mechanic:get-by-id', id),
+  updateMechanic: (data) => ipcRenderer.invoke('mechanic:update', data),
+  setMechanicStatus: (id, status) => ipcRenderer.invoke('mechanic:set-status', { id, status }),
+  deleteMechanic: (id) => ipcRenderer.invoke('mechanic:delete', id),
+  getMechanicLedgerSummary: (filterParams) => ipcRenderer.invoke('mechanic:ledger-summary', filterParams),
+  getMechanicLedgerHistory: (filterParams) => ipcRenderer.invoke('mechanic:ledger-history', filterParams),
 
   // File Management
   uploadProfileImage: (imageData) => ipcRenderer.invoke('file:upload-profile-image', imageData),

@@ -1,39 +1,46 @@
 import { addTransaction } from '../ipcHandlers/ledgerHandlers.js';
 
-// Helper to generate next order number
-export const getNextOrderNumber = async (db) => {
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+// Financial year runs 1 April - 31 March; identified by the calendar year it starts in
+const financialYearOf = (year, monthIndex) => (monthIndex >= 3 ? year : year - 1);
+
+// Helper to generate next order number: YYYY-MON-NNN (e.g. 2026-OCT-001, 2026-NOV-002).
+// The serial counts through the financial year and starts again from 001 every 1 April.
+export const getNextOrderNumber = async (db, billDate = new Date()) => {
   return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT order_number FROM sales_orders ORDER BY id DESC LIMIT 1`,
-      (err, row) => {
+    db.all(
+      `SELECT order_number FROM sales_orders WHERE order_number GLOB '[0-9][0-9][0-9][0-9]-[A-Z][A-Z][A-Z]-[0-9]*'`,
+      (err, rows) => {
         if (err) {
           reject(err);
           return;
         }
 
-        const currentYear = new Date().getFullYear();
-        const prefix = `SO-${currentYear}-`;
-        
-        if (!row || !row.order_number) {
-          resolve(`${prefix}001`);
-          return;
-        }
+        db.get(`SELECT bill_start_serial, bill_start_fy FROM store_settings LIMIT 1`, (startErr, start) => {
 
-        // Extract number from last order (assuming format SO-YYYY-XXX)
-        const lastOrderNumber = row.order_number;
-        const parts = lastOrderNumber.split('-');
-        
-        if (parts.length === 3 && parts[1] === String(currentYear)) {
-          const lastSequence = parseInt(parts[2], 10);
-          if (!isNaN(lastSequence)) {
-            const nextSequence = String(lastSequence + 1).padStart(3, '0');
-            resolve(`${prefix}${nextSequence}`);
-            return;
+        const now = billDate instanceof Date && !isNaN(billDate) ? billDate : new Date();
+        const fy = financialYearOf(now.getFullYear(), now.getMonth());
+
+        let lastSerial = 0;
+        for (const { order_number } of rows || []) {
+          const [year, mon, serial] = order_number.split('-');
+          const monthIndex = MONTHS.indexOf(mon);
+          if (monthIndex < 0) continue;
+          if (financialYearOf(Number(year), monthIndex) === fy) {
+            lastSerial = Math.max(lastSerial, parseInt(serial, 10) || 0);
           }
         }
 
-        // Fallback if format doesn't match or new year
-        resolve(`${prefix}001`);
+        // A starting number set for this financial year (e.g. continuing a paper series) is the
+        // minimum next serial; an unset or older-year value is ignored
+        let next = lastSerial + 1;
+        if (!startErr && start?.bill_start_serial > 0 && Number(start.bill_start_fy) === fy) {
+          next = Math.max(next, Number(start.bill_start_serial));
+        }
+
+        resolve(`${now.getFullYear()}-${MONTHS[now.getMonth()]}-${String(next).padStart(3, '0')}`);
+        });
       }
     );
   });
@@ -49,7 +56,7 @@ export const createSalesOrder = async (db, orderData) => {
   console.log('📥 Creating sales order using OrderService');
       
   // Generate the next order number dynamically to ensure sequence
-  const nextOrderNumber = await getNextOrderNumber(db);
+  const nextOrderNumber = await getNextOrderNumber(db, orderData.orderDate ? new Date(orderData.orderDate) : new Date());
   
     const { 
         orderDate, orderTime, customer, storeDetails, 
@@ -84,7 +91,8 @@ export const createSalesOrder = async (db, orderData) => {
             payment.splitPayments?.cash || 0, payment.splitPayments?.card || 0, payment.splitPayments?.upi || 0, payment.splitPayments?.credit || 0, payment.splitPayments?.loyaltyPoints || 0,
             calculations.loyaltyPointsUsed, calculations.loyaltyPointsValue,
             additionalInfo.customerNotes, payment.balanceAmount || 0,
-            orderData.priceLevel || 'Retail'
+            orderData.priceLevel || 'Retail',
+            orderData.mechanicId || null, orderData.mechanicName || null
           ];
     
           db.run(
@@ -97,8 +105,8 @@ export const createSalesOrder = async (db, orderData) => {
               payment_type, payment_method, received_amount, change_amount,
               split_payment_cash, split_payment_card, split_payment_upi, split_payment_credit, split_payment_loyalty,
               loyalty_points_used, loyalty_points_amount,
-              notes, balance_amount, price_category
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              notes, balance_amount, price_category, mechanic_id, mechanic_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             sanitizeParams(params),
             function(err) {
               if (err) reject(err);

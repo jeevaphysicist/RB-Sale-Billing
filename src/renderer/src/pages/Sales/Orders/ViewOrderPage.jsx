@@ -132,7 +132,7 @@ const ViewOrderPage = () => {
         paid: 'bg-green-100 text-green-800',
         partial: 'bg-blue-100 text-blue-800',
         pending: 'bg-yellow-100 text-yellow-800',
-        refunded: 'bg-orange-100 text-orange-800'
+        refunded: 'bg-gray-100 text-gray-600'
     };
 
     return (
@@ -437,7 +437,7 @@ const ViewOrderPage = () => {
                                 onChange={(e) => setRefundData({ ...refundData, method: e.target.value })}
                             >
                                 <option value="Cash">Cash</option>
-                                <option value="Card">Card</option>
+                                <option value="Card">Cheque/NEFT</option>
                                 <option value="UPI">UPI</option>
                             </select>
                         </div>

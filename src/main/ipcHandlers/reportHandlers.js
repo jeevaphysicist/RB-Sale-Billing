@@ -21,7 +21,18 @@ const EXCLUDED_STATUSES = ['cancelled', 'returned'];
 // Finds missing sequence numbers in bill numbers of the form PREFIX-YYYY-NNN
 const findMissingBillNumbers = (orderNumbers) => {
   const byPrefix = {};
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   for (const number of orderNumbers) {
+    // YYYY-MON-NNN: the serial runs through the financial year, so group by financial year, not month
+    const fyMatch = /^(\d{4})-([A-Z]{3})-(\d+)$/.exec(number || '');
+    if (fyMatch && MONTHS.includes(fyMatch[2])) {
+      const monthIndex = MONTHS.indexOf(fyMatch[2]);
+      const startYear = monthIndex >= 3 ? Number(fyMatch[1]) : Number(fyMatch[1]) - 1;
+      const fyPrefix = `FY${startYear}-${String(startYear + 1).slice(2)} #`;
+      if (!byPrefix[fyPrefix]) byPrefix[fyPrefix] = { width: fyMatch[3].length, seqs: new Set() };
+      byPrefix[fyPrefix].seqs.add(parseInt(fyMatch[3], 10));
+      continue;
+    }
     const match = /^(.*-)(\d+)$/.exec(number || '');
     if (!match) continue;
     const [, prefix, seq] = match;

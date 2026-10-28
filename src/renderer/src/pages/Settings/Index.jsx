@@ -90,6 +90,8 @@ const Settings = () => {
     email: '',
     website: '',
     gstin: '',
+    bill_start_serial: '',
+    bill_start_fy: null,
     god_name: '',
     fassai_no: ''
   });
@@ -200,7 +202,11 @@ const Settings = () => {
           ...prev,
           ...response.data,
           god_name: response.data.god_name ?? '',
-          fassai_no: response.data.fassai_no ?? ''
+          fassai_no: response.data.fassai_no ?? '',
+          // A starting bill number belongs to one financial year; show it only while that year is current
+          bill_start_serial: response.data.bill_start_fy === (new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1)
+            ? (response.data.bill_start_serial ?? '')
+            : ''
         }));
       }
     } catch (error) {
@@ -410,7 +416,13 @@ const Settings = () => {
     e.preventDefault();
     try {
       setSaving(true);
-      const response = await settingsService.updateStoreDetails(storeDetails);
+      // The starting bill number applies to the financial year it is saved in (1 April - 31 March)
+      const now = new Date();
+      const financialYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+      const response = await settingsService.updateStoreDetails({
+        ...storeDetails,
+        bill_start_fy: financialYear
+      });
       if (response.success) {
         toast.success(t('settings.messages.storeUpdateSuccess'));
       } else {
@@ -562,6 +574,22 @@ const Settings = () => {
                       <Field label="District" name="district" value={storeDetails.district} onChange={handleStoreChange} placeholder="Enter District" />
                       <Field label={t('settings.store.state')} name="state" value={storeDetails.state} onChange={handleStoreChange} />
                       <Field label={t('settings.store.pincode')} name="pincode" value={storeDetails.pincode} onChange={handleStoreChange} />
+                    </StoreSection>
+
+                    <StoreSection title="Bill numbering" description="Continue an existing bill series. Applies to the current financial year (1 April - 31 March) only.">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700">Start this year's bill numbers from</label>
+                        <input
+                          type="number"
+                          min="1"
+                          name="bill_start_serial"
+                          value={storeDetails.bill_start_serial ?? ''}
+                          onChange={handleStoreChange}
+                          className={inputClass}
+                          placeholder="e.g. 16"
+                        />
+                        <p className="text-xs text-gray-500">Next bill will be numbered from this serial, e.g. 2026-OCT-016. Leave empty to start at 001.</p>
+                      </div>
                     </StoreSection>
 
                     <StoreSection title="Contact" description="How customers can reach you.">

@@ -1,5 +1,9 @@
 appId: com.rabtoise.billing
 productName: Rabtoise Billing
+# Smaller installer: only English Chromium locale packs, maximum compression
+electronLanguages:
+  - en-US
+compression: maximum
 directories:
   buildResources: build
 files:
@@ -8,13 +12,16 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-asarUnpack:
-  - resources/**
+  - '!{prototype,check_db.js,verify_templates.js,marketing_pitch.md.resolved}'
+  # Fonts ship once, through extraResources below (not a second time inside the asar)
+  - '!resources/{Noto_Sans_Tamil,Mukta_Malar}/**'
 extraResources:
   - from: resources
     to: resources
     filter:
-      - '**/*'
+      - 'Noto_Sans_Tamil/static/NotoSansTamil-Regular.ttf'
+      - 'Noto_Sans_Tamil/static/NotoSansTamil-Bold.ttf'
+      - 'invoice-logo.png'
 win:
   executableName: rabtoise-billing
   icon: build/icon.ico

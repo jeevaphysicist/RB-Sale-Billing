@@ -26,6 +26,9 @@ const SalesReport = React.lazy(() => import("./pages/Reports/SalesReport"));
 const HsnReport = React.lazy(() => import("./pages/Reports/HsnReport"));
 const CustomerReport = React.lazy(() => import("./pages/Reports/CustomerReport"));
 const CustomerHistory = React.lazy(() => import("./pages/Reports/CustomerHistory"));
+const MechanicReport = React.lazy(() => import("./pages/Reports/MechanicReport"));
+const MechanicHistory = React.lazy(() => import("./pages/Reports/MechanicHistory"));
+const Mechanics = React.lazy(() => import("./pages/Masters/Mechanic/Index"));
 const Suppliers = React.lazy(() => import("./pages/Masters/Supplier/Index"));
 const Customers = React.lazy(() => import("./pages/Masters/Customer/Index"));
 const Settings = React.lazy(() => import("./pages/Settings/Index"));
@@ -40,7 +43,6 @@ function AppContent() {
     { path: "/", element: <Home /> },
     { path: "/sales", element: <SalesList /> },
     { path: "/sales/new", element: <SalesAddEdit />, noLayout: true },
-    { path: "/sales/edit/:id", element: <SalesAddEdit /> },
     { path: "/sales/view/:id", element: <SalesView /> },
     { path: "/sales/order/new", element: <SalesOrderForm /> },
     { path: "/sales/order/edit/:id", element: <SalesOrderForm /> },
@@ -50,6 +52,9 @@ function AppContent() {
     { path: "/reports/hsn", element: <HsnReport /> },
     { path: "/reports/customers", element: <CustomerReport /> },
     { path: "/reports/customers/:id", element: <CustomerHistory /> },
+    { path: "/reports/mechanics", element: <MechanicReport /> },
+    { path: "/reports/mechanics/:id", element: <MechanicHistory /> },
+    { path: "/mechanics", element: <Mechanics /> },
     { path: "/suppliers", element: <Suppliers /> },
     { path: "/suppliers/import", element: <ImportSuppliers /> },
     { path: "/customers", element: <Customers /> },

@@ -18,7 +18,9 @@ import {
   ShoppingBasket,
   BarChart3,
   Hash,
-  History
+  History,
+  Wrench,
+  BookOpen
 } from 'lucide-react'
 import WindowControls from './WindowControls'
 import FontSizeControls from './FontSizeControls'
@@ -77,7 +79,8 @@ const Layout = ({ children, onLogout, currentUser }) => {
       subItems: [
         { icon: FileText, label: t('nav.salesReport'), path: '/reports/sales' },
         { icon: Hash, label: t('nav.hsnReport'), path: '/reports/hsn' },
-        { icon: History, label: t('nav.customerHistory'), path: '/reports/customers' }
+        { icon: History, label: t('nav.customerHistory'), path: '/reports/customers' },
+        { icon: BookOpen, label: 'Mechanic Ledger', path: '/reports/mechanics' }
       ]
     },
     {
@@ -86,7 +89,8 @@ const Layout = ({ children, onLogout, currentUser }) => {
       label: 'Parties', // Using hardcoded label 'Parties' as key might not exist
       isGroup: true,
       subItems: [
-        { icon: UserPlus, label: t('nav.customers'), path: '/customers', defaultSub: '/customers' }
+        { icon: UserPlus, label: t('nav.customers'), path: '/customers', defaultSub: '/customers' },
+        { icon: Wrench, label: 'Mechanics', path: '/mechanics' }
       ]
     },
     {

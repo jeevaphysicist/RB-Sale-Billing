@@ -2,6 +2,7 @@ import { appConfig } from './ipcHandlers/appConfig.js'
 import { initializeUserHandlers } from './ipcHandlers/userHandlers.js'
 import { initializeSupplierHandlers } from './ipcHandlers/supplierHandlers.js'
 import { initializeCustomerHandlers } from './ipcHandlers/customerHandlers.js'
+import { initializeMechanicHandlers } from './ipcHandlers/mechanicHandlers.js'
 import { initializeFileHandlers } from './ipcHandlers/fileHandlers.js'
 import { initializePaymentRecordHandlers } from './ipcHandlers/paymentRecordHandlers.js'
 import { initializeSalesOrderHandlers } from './ipcHandlers/salesOrderHandlers.js'
@@ -14,6 +15,7 @@ export function registerIpcHandlers(mainWindow, app, db, dbPath) {
   // Initialize supplier and customer handlers first since they don't depend on the mainWindow
   initializeSupplierHandlers(db);
   initializeCustomerHandlers(db);
+  initializeMechanicHandlers(db);
   initializePaymentRecordHandlers(db);
   initializeSalesOrderHandlers(db);
   initializeReportHandlers(db);

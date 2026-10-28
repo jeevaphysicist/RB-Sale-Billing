@@ -17,7 +17,9 @@ import {
   ChevronRight,
   Loader2,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Wrench,
+  BookOpen
 } from 'lucide-react'
 import { getPresetRange, formatMoney, ALL_TIME_RANGE } from '../Reports/reportUtils'
 
@@ -82,9 +84,11 @@ const Index = () => {
     { label: t('nav.salesList'), path: '/sales', icon: FileText, tone: 'bg-blue-100 text-blue-700' },
     { label: t('nav.paymentTracking'), path: '/sales/payments', icon: Banknote, tone: 'bg-amber-100 text-amber-700' },
     { label: t('nav.customers'), path: '/customers', icon: Users, tone: 'bg-purple-100 text-purple-700' },
+    { label: 'Mechanics', path: '/mechanics', icon: Wrench, tone: 'bg-orange-100 text-orange-700' },
     { label: t('nav.salesReport'), path: '/reports/sales', icon: BarChart3, tone: 'bg-indigo-100 text-indigo-700' },
     { label: t('nav.hsnReport'), path: '/reports/hsn', icon: Hash, tone: 'bg-cyan-100 text-cyan-700' },
     { label: t('nav.customerHistory'), path: '/reports/customers', icon: History, tone: 'bg-pink-100 text-pink-700' },
+    { label: 'Mechanic Ledger', path: '/reports/mechanics', icon: BookOpen, tone: 'bg-teal-100 text-teal-700' },
     { label: t('nav.settings'), path: '/settings', icon: Settings, tone: 'bg-gray-200 text-gray-700' }
   ]
 

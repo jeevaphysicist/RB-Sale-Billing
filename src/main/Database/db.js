@@ -198,6 +198,38 @@ const runMigrations = (db, callback) => {
       sql: `ALTER TABLE store_settings ADD COLUMN fassai_no TEXT`
     },
     {
+      // Bill numbers of the financial year starting in bill_start_fy begin at bill_start_serial
+      name: 'add_bill_start_serial_to_store_settings',
+      sql: `ALTER TABLE store_settings ADD COLUMN bill_start_serial INTEGER`
+    },
+    {
+      name: 'add_bill_start_fy_to_store_settings',
+      sql: `ALTER TABLE store_settings ADD COLUMN bill_start_fy INTEGER`
+    },
+    {
+      // Mechanics who refer customers; bills name one as the referrer
+      name: 'create_mechanics_table',
+      sql: `CREATE TABLE IF NOT EXISTS mechanics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mechanic_code TEXT UNIQUE,
+        mechanic_name TEXT NOT NULL,
+        mobile_number TEXT,
+        address TEXT,
+        notes TEXT,
+        status TEXT DEFAULT 'Active',
+        created_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes')),
+        updated_at DATETIME DEFAULT (datetime('now', '+5 hours', '30 minutes'))
+      )`
+    },
+    {
+      name: 'add_mechanic_id_to_sales_orders',
+      sql: `ALTER TABLE sales_orders ADD COLUMN mechanic_id INTEGER`
+    },
+    {
+      name: 'add_mechanic_name_to_sales_orders',
+      sql: `ALTER TABLE sales_orders ADD COLUMN mechanic_name TEXT`
+    },
+    {
       name: 'drop_removed_modules_tables',
       sql: `
         DROP TABLE IF EXISTS purchase_order_items;

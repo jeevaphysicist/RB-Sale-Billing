@@ -1,5 +1,10 @@
 import PDFDocument from 'pdfkit';
-import { TAMIL_FONTS } from './utils.js';
+import fs from 'fs';
+import path from 'path';
+import { TAMIL_FONTS, RESOURCES_PATH } from './utils.js';
+
+// Client logo printed at the top-left of the invoice (skipped when the file is missing)
+const LOGO_PATH = path.join(RESOURCES_PATH, 'invoice-logo.png');
 
 // Generate Tax Invoice PDF (A4, green/yellow layout with bank details and GST totals)
 export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
@@ -69,6 +74,8 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
           : rate > 0 ? totalValue / (1 + rate / 100) : totalValue;
         return {
           description: item.description || '',
+          hsn: item.hsn || '',
+          unitPrice: num(item.rate),
           quantity: item.quantity ?? '',
           totalValue,
           taxable,
@@ -106,12 +113,18 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
       newPage();
       let y = frameTop + 14;
 
-      // Title
+      // Row 1: logo on the left, TAX INVOICE title on the right
+      // Logo is transparent and cropped, so it sits directly on the page (about 1.6 : 1)
+      const logoW = fs.existsSync(LOGO_PATH) ? 62 : 0;
+      const logoH = logoW ? 39 : 0;
+      if (logoW) {
+        doc.image(LOGO_PATH, left, y, { fit: [logoW, logoH] });
+      }
       doc.font(fontBold).fontSize(15).fillColor(GREEN)
-        .text(config.headerText && config.headerText !== 'Tax Invoice' ? config.headerText : 'TAX INVOICE', left, y, { width: contentW, align: 'right' });
-      y += 24;
+        .text(config.headerText && config.headerText !== 'Tax Invoice' ? config.headerText : 'TAX INVOICE', left, y + Math.max(0, (logoH - 18) / 2), { width: contentW, align: 'right' });
+      y += logoH + (logoH ? 4 : 0);
 
-      // Company block (left)
+      // Row 2: store details on the left, invoice details on the right
       const companyW = contentW * 0.56;
       doc.font(fontBold).fontSize(14).fillColor(GREEN).text((company.name || '').toUpperCase(), left, y, { width: companyW });
       let leftY = doc.y + 2;
@@ -129,7 +142,7 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
       const labelW = 105;
       const valueW = 110;
       const valueX = right - valueW;
-      let rightY = y + 22;
+      let rightY = y + 2;
       [
         { label: 'BILL TYPE :', value: billType },
         { label: 'PLACE OF SUPPLY :', value: placeOfSupply, highlight: true },
@@ -143,20 +156,23 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
         rightY += 20;
       });
 
-      y = Math.max(leftY, rightY) + 12;
+      y = Math.max(leftY, rightY) + 8;
 
       // Bill To
-      const billW = contentW * 0.62;
+      // The whole width is available (nothing sits to the right), so the address stays on one line
+      const billW = contentW;
       const billLabelW = 62;
       const rowH = 16;
       doc.rect(left, y, billW, rowH).fill(GREEN);
       doc.font(fontBold).fontSize(10).fillColor('#FFFFFF').text('BILL TO', left + 6, y + 3);
       y += rowH;
 
-      const addressLines = String(buyer.address || '')
-        .split(/\n|,/)
+      // One address line (wraps only if it is longer than the box)
+      const addressLines = [String(buyer.address || '')
+        .split(/[\n,]/)
         .map((line) => line.trim())
-        .filter(Boolean);
+        .filter(Boolean)
+        .join(', ')];
       const billRows = [
         { label: 'T.Name :', value: (buyer.name || '').toUpperCase() },
         ...(buyer.gstin ? [{ label: 'GSTIN :', value: buyer.gstin.toUpperCase() }] : []),
@@ -165,29 +181,33 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
       ];
       const billTop = y;
       billRows.forEach(({ label, value }) => {
-        doc.rect(left, y, billW, rowH).fill(YELLOW);
+        doc.font(font).fontSize(9);
+        const valueW2 = billW - billLabelW - 8;
+        const thisRowH = Math.max(rowH, Math.ceil(doc.heightOfString(value || ' ', { width: valueW2 })) + 6);
+        doc.rect(left, y, billW, thisRowH).fill(YELLOW);
         doc.font(fontBold).fontSize(9).fillColor('#000000')
           .text(label, left + 2, y + 3, { width: billLabelW - 6, align: 'right' });
-        doc.font(font).fontSize(9).text(value, left + billLabelW + 4, y + 3, { width: billW - billLabelW - 8, lineBreak: false, ellipsis: true });
-        doc.strokeColor('#000000').lineWidth(0.5).moveTo(left, y + rowH).lineTo(left + billW, y + rowH).stroke();
-        y += rowH;
+        doc.font(font).fontSize(9).text(value, left + billLabelW + 4, y + 3, { width: valueW2 });
+        doc.strokeColor('#000000').lineWidth(0.5).moveTo(left, y + thisRowH).lineTo(left + billW, y + thisRowH).stroke();
+        y += thisRowH;
       });
       doc.strokeColor('#000000').lineWidth(0.5)
         .rect(left, billTop - rowH, billW, y - billTop + rowH).stroke()
         .moveTo(left + billLabelW, billTop).lineTo(left + billLabelW, y).stroke();
-      y += 18;
+      y += 10;
 
       // Items table
       const cols = [
-        { key: 'sno', label: 'S.No', width: contentW * 0.07, align: 'center' },
-        { key: 'description', label: 'PRODUCT & DESCRIPTION', width: contentW * 0.5, align: 'left' },
-        { key: 'quantity', label: 'QTY', width: contentW * 0.08, align: 'center' },
-        { key: 'totalValue', label: 'TOTAL VALUE', width: contentW * 0.175, align: 'right' },
-        { key: 'taxable', label: 'TAXABLE VALUE', width: contentW * 0.175, align: 'right' }
+        { key: 'sno', label: 'S.No', width: contentW * 0.06, align: 'center' },
+        { key: 'description', label: 'PRODUCT & DESCRIPTION', width: contentW * 0.34, align: 'left' },
+        { key: 'hsn', label: 'HSN CODE', width: contentW * 0.1, align: 'center' },
+        { key: 'quantity', label: 'QTY', width: contentW * 0.07, align: 'center' },
+        { key: 'unitPrice', label: 'UNIT PRICE', width: contentW * 0.13, align: 'right' },
+        { key: 'totalValue', label: 'TOTAL VALUE', width: contentW * 0.15, align: 'right' },
+        { key: 'taxable', label: 'TAXABLE VALUE', width: contentW * 0.15, align: 'right' }
       ];
       const headerH = 18;
-      const itemH = 16;
-      const footerReserve = config.showSignatory !== false ? 300 : 240;
+      const itemH = 15;
 
       const drawHeader = () => {
         doc.rect(left, y, contentW, headerH).fill(GREEN);
@@ -211,10 +231,17 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
 
       drawHeader();
       let tableTop = y;
-      // Pad with empty rows like a pre-printed invoice book
-      const minRows = Math.max(items.length, 18);
+      // Only the bill's own items are listed (no blank rows, saves paper)
+      const minRows = items.length;
       for (let index = 0; index < minRows; index += 1) {
-        if (y + itemH > pageHeight - margin - (index < items.length ? 40 : footerReserve)) {
+        const item = items[index];
+        const description = item ? item.description.toUpperCase() : '';
+        // A long description wraps onto further lines and the row grows to fit it
+        doc.font(font).fontSize(9);
+        const descHeight = item ? doc.heightOfString(description, { width: cols[1].width - 8 }) : 0;
+        const rowH = Math.max(itemH, Math.ceil(descHeight) + 4);
+        // Items fill the whole printable area; if the totals block then does not fit it moves to the next page on its own
+        if (y + rowH > pageHeight - margin - 20) {
           if (index >= items.length) break;
           drawGrid(tableTop, y);
           newPage();
@@ -222,35 +249,44 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
           drawHeader();
           tableTop = y;
         }
-        const item = items[index];
         if (item) {
           const values = {
             sno: String(index + 1),
-            description: item.description.toUpperCase(),
+            description,
+            hsn: String(item.hsn),
             quantity: String(item.quantity),
+            unitPrice: money(item.unitPrice),
             totalValue: money(item.totalValue),
             taxable: money(item.taxable)
           };
           let x = left;
           doc.font(font).fontSize(9).fillColor('#000000');
           cols.forEach((col) => {
-            doc.text(values[col.key], x + 4, y + 3, { width: col.width - 8, align: col.align, lineBreak: false, ellipsis: true });
+            doc.text(values[col.key], x + 4, y + 3, col.key === 'description'
+              ? { width: col.width - 8, align: col.align }
+              : { width: col.width - 8, align: col.align, lineBreak: false, ellipsis: true });
             x += col.width;
           });
         }
-        doc.strokeColor('#000000').lineWidth(0.5).moveTo(left, y + itemH).lineTo(right, y + itemH).stroke();
-        y += itemH;
+        doc.strokeColor('#000000').lineWidth(0.5).moveTo(left, y + rowH).lineTo(right, y + rowH).stroke();
+        y += rowH;
       }
       drawGrid(tableTop, y);
+      y += 6; // small gap so the totals box does not touch the table edge
 
-      if (y + footerReserve > pageHeight - margin) {
-        newPage();
-        y = margin + 16;
-      }
+      // The closing blocks flow onto the page one by one, so unused space on a page stays small
+      const ensureSpace = (height) => {
+        if (y + height > pageHeight - margin) {
+          newPage();
+          y = margin + 16;
+        }
+      };
+      ensureSpace(100); // totals + payment details
 
       // Totals (right)
-      const totalsLabelW = cols[3].width;
-      const totalsValueW = cols[4].width;
+      // Labels span the Unit Price + Total Value columns, amounts sit under Taxable Value
+      const totalsLabelW = cols[4].width + cols[5].width;
+      const totalsValueW = cols[6].width;
       const totalsX = right - totalsLabelW - totalsValueW;
       const totalsTop = y;
       const totalRows = [
@@ -294,45 +330,45 @@ export const generateTaxInvoicePDF = (invoiceData, config = {}) => {
           doc.font(fontBold).fontSize(9.5).fillColor('#000000')
             .text(`${label} :`, left, bankY, { width: 68, align: 'right' });
           doc.font(font).text(String(value).toUpperCase(), left + 74, bankY, { width: bankW - 74 });
-          bankY += 15;
+          bankY += 14;
         });
         y = Math.max(y, bankY);
       }
 
       // Authorised signatory (right)
       if (config.showSignatory !== false) {
+        ensureSpace(60);
         const signW = contentW * 0.6;
         const signX = right - signW;
-        y += 12;
+        y += 8;
         doc.font(fontBold).fontSize(10).fillColor('#000000')
           .text(config.authorizedSignatoryFor || `for ${(company.name || '').toUpperCase()}`, signX, y, { width: signW, align: 'right' });
-        y = doc.y + 30;
+        y = doc.y + 16;
         doc.font(font).fontSize(10)
           .text(config.authorizedSignatoryLabel || 'Authorised Signatory', signX, y, { width: signW, align: 'right' });
         y = doc.y;
       }
 
       // Contact line
-      y += 20;
-      doc.font(font).fontSize(11).fillColor('#000000')
+      ensureSpace(72);
+      y += 6;
+      doc.font(font).fontSize(10).fillColor('#000000')
         .text('If you have any questions about this invoice, please contact', left, y, { width: contentW, align: 'center' });
       y = doc.y + 1;
-      if (company.phone) {
-        doc.text(`Cell: ${company.phone}`, left, y, { width: contentW, align: 'center' });
-        y = doc.y;
-      }
-      if (company.email) {
-        doc.text(`Email: ${company.email}`, left, y, { width: contentW, align: 'center' });
+      // Phone and email share one line to save height
+      const contactLine = [company.phone && `Cell: ${company.phone}`, company.email && `Email: ${company.email}`].filter(Boolean).join('     ');
+      if (contactLine) {
+        doc.text(contactLine, left, y, { width: contentW, align: 'center' });
         y = doc.y;
       }
 
       // Footer band
-      y += 10;
+      y += 6;
       doc.strokeColor(GREEN).lineWidth(2).moveTo(frameX, y).lineTo(frameX + frameW, y).stroke();
-      y += 8;
+      y += 6;
       doc.font(fontBold).fontSize(11).fillColor('#000000')
         .text(config.footerText && config.footerText !== 'Thank you for your business!' ? config.footerText : 'Thank You For Your Business with us!', left, y, { width: contentW, align: 'center' });
-      y = doc.y + 8;
+      y = doc.y + 6;
 
       // Outer frame on the last page
       doc.strokeColor(GREEN).lineWidth(2).rect(frameX, frameTop, frameW, y - frameTop).stroke();

@@ -488,7 +488,7 @@ const SalesOrderForm = () => {
                                         onChange={(e) => setPaymentMethod(e.target.value)}
                                     >
                                         <option value="cash">Cash</option>
-                                        <option value="card">Card</option>
+                                        <option value="card">Cheque/NEFT</option>
                                         <option value="upi">UPI</option>
                                         <option value="bank_transfer">Bank Transfer</option>
                                     </select>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Eye,
-  Edit,
   Ban,
   Download,
   Plus,
@@ -127,10 +126,6 @@ const Index = () => {
 
   const handleCancelDelete = () => {
     setDeleteModal({ isOpen: false, order: null, loading: false });
-  };
-
-  const handleEditOrder = (order) => {
-    navigate(`/sales/edit/${order.id}`);
   };
 
   const handleViewClick = (order) => {
@@ -273,7 +268,7 @@ const Index = () => {
           pending: 'bg-yellow-100 text-yellow-800',
           partial: 'bg-blue-100 text-blue-800',
           paid: 'bg-green-100 text-green-800',
-          refunded: 'bg-orange-100 text-orange-800'
+          refunded: 'bg-gray-100 text-gray-600'
         };
         return (
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[value?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
@@ -311,19 +306,7 @@ const Index = () => {
             <Printer className="w-4 h-4" />
           </button>
 
-          {/* Edit and Cancel stay visible but are disabled once the bill is cancelled / returned */}
-          <button
-            disabled={isClosed(row)}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEditOrder(row);
-            }}
-            className="p-1 px-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-            title={t('sales.actions.viewEdit')}
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-
+          {/* Cancel stays visible but is disabled once the bill is cancelled / returned */}
           <button
             disabled={isClosed(row)}
             onClick={(e) => {

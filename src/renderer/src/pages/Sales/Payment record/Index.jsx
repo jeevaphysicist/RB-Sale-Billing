@@ -239,7 +239,7 @@ const Index = () => {
           'pending': 'bg-yellow-100 text-yellow-700',
           'partial': 'bg-blue-100 text-blue-700',
           'paid': 'bg-green-100 text-green-700',
-          'refunded': 'bg-orange-100 text-orange-700'
+          'refunded': 'bg-gray-100 text-gray-600'
         };
         return (
           <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[value] || 'bg-gray-100 text-gray-700'}`}>
@@ -447,7 +447,7 @@ const Index = () => {
                         <tr key={payment.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-sm text-gray-900">{formatDate(payment.payment_date)}</td>
                           <td className="px-4 py-3 text-sm font-semibold text-green-600">{formatCurrency(payment.payment_amount)}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{payment.payment_method}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{(/^(card|credit card|debit card|cheque)$/i.test(String(payment.payment_method || '')) ? 'Cheque/NEFT' : payment.payment_method)}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{payment.reference_number || '-'}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{payment.notes || '-'}</td>
                           <td className="px-4 py-3 text-center">

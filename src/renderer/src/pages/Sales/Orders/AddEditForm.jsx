@@ -368,6 +368,19 @@ const POSBillingSystem = () => {
   const [billRowHeight, setBillRowHeight] = useState(null);
   // Text being typed into a Quantity / Price cell: { row, col, text }
   const [billCellDraft, setBillCellDraft] = useState(null);
+  // Active mechanics for the optional "Mechanic (Referrer)" field
+  const [mechanics, setMechanics] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await window.api.getMechanics({ status: 'Active', page: 1, limit: 500, sortKey: 'mechanic_name', sortDirection: 'ASC' });
+        if (response?.success) setMechanics(response.data || []);
+      } catch (error) {
+        console.error('Error loading mechanics:', error);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const container = billItemsContainerRef.current;
@@ -827,7 +840,10 @@ const POSBillingSystem = () => {
   // it is not billed or saved (see filledBillItems); enter a price to charge it.
   const LABOUR_CHARGE_NAME = 'Labour Charge';
 
-  const createLabourChargeLine = () => ({ ...createBlankLine(), name: LABOUR_CHARGE_NAME, qty: 1 });
+  // Service accounting code used for labour charges
+  const LABOUR_CHARGE_HSN = '9987';
+
+  const createLabourChargeLine = () => ({ ...createBlankLine(), name: LABOUR_CHARGE_NAME, qty: 1, hsnCode: LABOUR_CHARGE_HSN });
 
   const isUnusedLabourChargeLine = (item) =>
     String(item.name || '').trim() === LABOUR_CHARGE_NAME && !(Number(item.rate) > 0);
@@ -855,6 +871,11 @@ const POSBillingSystem = () => {
     // A new row starts at quantity 1 as soon as something is typed into it
     if (isBlankLine(current) && !('qty' in changes) && !(Number(current.qty) > 0)) {
       updated.qty = 1;
+    }
+    // Typing "Labour Charge" in any row fills its HSN automatically (labour is a service: 9987)
+    if ('name' in changes && !String(updated.hsnCode || '').trim() &&
+      String(updated.name || '').trim().toLowerCase() === LABOUR_CHARGE_NAME.toLowerCase()) {
+      updated.hsnCode = LABOUR_CHARGE_HSN;
     }
     rows[rowIndex] = withDerivedPrice(updated);
 
@@ -985,25 +1006,20 @@ const POSBillingSystem = () => {
     const discountAmount = (basePrice * item.discount) / 100;
     const priceAfterDiscount = basePrice - discountAmount;
 
-    // If tax is included in price, show amount excluding tax in the Amount column
-    // If tax is not included in price, show the entered amount (tax will be added separately)
-    if (taxSettings.enableTax && taxSettings.taxIncludedInPrice && item.tax > 0) {
-      // Tax is included in price: extract tax to show amount without tax
-      // Formula: taxableAmount = priceAfterDiscount / (1 + taxRate/100)
-      const taxableAmount = priceAfterDiscount / (1 + item.tax / 100);
-      return taxableAmount;
-    } else {
-      // Tax is not included in price OR no tax: show the entered amount as is
-      return priceAfterDiscount;
-    }
+    // Prices are GST-inclusive: the taxable (before-tax) value is the amount with the GST taken out
+    return priceAfterDiscount / (1 + GST_RATE / 100);
   };
 
-  // GST base for a row = Quantity × Price + Labour Charge (the derived unit price
-  // already includes the labour charge). The "Labour Charge" line is taxed too.
-  const getGstBase = (item) => {
+  // Amount payable for a row (GST included) = Quantity × Price + Labour Charge (the derived
+  // unit price already includes the labour charge), after the row discount.
+  const getGrossAmount = (item) => {
     const base = (Number(item.price) || 0) * (Number(item.qty) || 0);
     return base - (base * (Number(item.discount) || 0)) / 100;
   };
+
+  // GST base (taxable value) of a row: the entered price already includes GST, so back it out.
+  // The "Labour Charge" line is taxed too.
+  const getGstBase = (item) => getGrossAmount(item) / (1 + GST_RATE / 100);
 
   // Calculate tax amounts for an item
   const calculateItemTaxAmounts = (item) => {
@@ -1171,6 +1187,9 @@ const POSBillingSystem = () => {
       if (!item.name || !item.name.trim()) {
         errors.push(t('sales.pos.validation.itemNameRequired', { index: index + 1 }));
       }
+      if (!String(item.hsnCode || '').trim()) {
+        errors.push(`Item ${index + 1}: HSN code is required.`);
+      }
       if (!item.qty || item.qty <= 0) {
         errors.push(t('sales.pos.validation.invalidQty', { index: index + 1 }));
       }
@@ -1217,10 +1236,21 @@ const POSBillingSystem = () => {
     return errors;
   };
 
+  // yyyy-mm-dd in local time, the format of a date input
+  const toDateInputValue = (date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
   // Create comprehensive order data object with all fields for database storage and future editing
   const createOrderData = (resolvedCustomer) => {
     const taxBreakdown = calculateTaxBreakdown();
-    const currentDateTime = new Date().toISOString();
+    // The bill date is editable; the time of day is the moment the bill is saved
+    const billDateText = activeTab.billDate || toDateInputValue(new Date());
+    const billMoment = new Date();
+    if (billDateText !== toDateInputValue(billMoment)) {
+      const [y, m, d] = billDateText.split('-').map(Number);
+      billMoment.setFullYear(y, m - 1, d);
+    }
+    const currentDateTime = billMoment.toISOString();
 
     // Calculate payment status and balance
     const effectivePaidAmount = activeTab.paymentType === 'single'
@@ -1241,8 +1271,12 @@ const POSBillingSystem = () => {
       // === ORDER HEADER INFORMATION ===
       orderNumber: activeTab.billNo,
       orderDate: currentDateTime,
-      orderTime: new Date().toLocaleTimeString('en-IN', { hour12: true }),
+      orderTime: billMoment.toLocaleTimeString('en-IN', { hour12: true }),
       priceLevel: activeTab.priceLevel || 'Retail',
+
+      // === REFERRER (optional mechanic) ===
+      mechanicId: activeTab.mechanicId || null,
+      mechanicName: mechanics.find((m) => String(m.id) === String(activeTab.mechanicId))?.mechanic_name || null,
 
       // === CUSTOMER INFORMATION ===
       customerId: validCustomerId,
@@ -1308,7 +1342,7 @@ const POSBillingSystem = () => {
           // Calculated amounts
           grossAmount: item.price * item.qty, // Before discount
           netAmount: calculateItemTotal(item), // After discount, tax handling based on settings
-          finalAmount: calculateItemTotal(item) + itemTaxAmounts.taxAmount // Final amount including tax
+          finalAmount: getGrossAmount(item) // Amount including tax (the price entered is GST-inclusive)
         };
       }),
 
@@ -2120,7 +2154,7 @@ const POSBillingSystem = () => {
                         <div className="flex justify-between">
                           <span className="text-gray-500">{t('sales.pos.successModal.date')}</span>
                           <span className="font-medium text-gray-900">
-                            {new Date().toLocaleDateString('en-IN')}
+                            {(createdOrder.orderDate ? new Date(createdOrder.orderDate) : new Date()).toLocaleDateString('en-IN')}
                           </span>
                         </div>
 
@@ -2298,9 +2332,35 @@ const POSBillingSystem = () => {
                 {/* Title on the left, search on the right; details grid below */}
                 <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-semibold flex items-center gap-2 text-sm">
-                  <User size={16} /> {t('sales.pos.rightPanel.customer')}
-                </h3>
+                <div className="flex items-center gap-4">
+                  <h3 className="font-semibold flex items-center gap-2 text-sm">
+                    <User size={16} /> {t('sales.pos.rightPanel.customer')}
+                  </h3>
+                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                    Bill Date
+                    <input
+                      type="date"
+                      value={activeTab.billDate || toDateInputValue(new Date())}
+                      max={toDateInputValue(new Date())}
+                      onChange={(e) => e.target.value && updateActiveTab({ billDate: e.target.value })}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                    Mechanic
+                    <select
+                      value={activeTab.mechanicId || ''}
+                      onChange={(e) => updateActiveTab({ mechanicId: e.target.value || null })}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[180px]"
+                      title="Mechanic who referred this customer (optional)"
+                    >
+                      <option value="">Referrer (optional)</option>
+                      {mechanics.map((mechanic) => (
+                        <option key={mechanic.id} value={mechanic.id}>{mechanic.mechanic_name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 {/* Customer Search Dropdown */}
                 <div className="relative w-full sm:w-96">
                   <div className="flex gap-1">
@@ -2490,6 +2550,7 @@ const POSBillingSystem = () => {
                       <col style={{ width: '80px' }} />
                       <col style={{ width: '80px' }} />
                       <col style={{ width: '100px' }} />
+                      <col style={{ width: '120px' }} />
                       <col style={{ width: '50px' }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10">
@@ -2500,6 +2561,7 @@ const POSBillingSystem = () => {
                         <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Unit</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Quantity</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">Price</th>
+                        <th className="border border-gray-300 px-1 py-1.5 text-right text-xs font-semibold bg-gray-100">Total Amount</th>
                         <th className="border border-gray-300 px-1 py-1.5 text-center text-xs font-semibold bg-gray-100">Action</th>
                       </tr>
                     </thead>
@@ -2511,6 +2573,7 @@ const POSBillingSystem = () => {
                         const inUse = !!item && !blank && !isUnusedLabourChargeLine(item);
                         const missing = {
                           name: inUse && !String(item.name || '').trim(),
+                          hsn: inUse && !String(item.hsnCode || '').trim(),
                           qty: inUse && !(Number(item.qty) > 0),
                           price: inUse && !(Number(item.rate) > 0)
                         };
@@ -2550,7 +2613,7 @@ const POSBillingSystem = () => {
                                 value={item?.hsnCode || ''}
                                 onChange={(e) => updateBillRow(index, { hsnCode: e.target.value })}
                                 onKeyDown={(e) => handleBillCellKeyDown(e, index, 'hsn')}
-                                className={`${cellClass} text-center`}
+                                className={`${cellClassFor('hsn')} text-center`}
                               />
                             </td>
                             <td className="border border-gray-300 p-0">
@@ -2590,6 +2653,9 @@ const POSBillingSystem = () => {
                                 onKeyDown={(e) => handleBillCellKeyDown(e, index, 'price')}
                                 className={`${cellClassFor('price')} text-right`}
                               />
+                            </td>
+                            <td className="border border-gray-300 px-2 text-sm text-right font-medium text-gray-800">
+                              {!blank && getGrossAmount(item) > 0 ? getGrossAmount(item).toFixed(2) : ''}
                             </td>
                             <td className="border border-gray-300 px-1 text-center">
                               {!blank && (
@@ -3181,7 +3247,7 @@ const POSBillingSystem = () => {
                     >
                       <div className="flex items-center justify-center gap-1.5">
                         <span className="text-base">💳</span>
-                        <span>Card</span>
+                        <span>Cheque/NEFT</span>
                       </div>
                       <span className={`absolute top-0.5 right-1 text-[10px] px-1 rounded ${activeTab.paymentType === 'single' && activeTab.paymentMethod === 'card'
                         ? 'bg-white/20 text-white'
@@ -3314,7 +3380,7 @@ const POSBillingSystem = () => {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600 mb-1 block">💳 Card</label>
+                        <label className="text-xs text-gray-600 mb-1 block">💳 Cheque/NEFT</label>
                         <input
                           type="number"
                           value={activeTab.splitPayments.card || ''}
